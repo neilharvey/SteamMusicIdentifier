@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Stream Music Identifier</title>
+    <style>
+        body {
+            width: 320px;
+            padding: 16px;
+            font: 14px system-ui, sans-serif;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            margin: 4px 0;
+            cursor: pointer;
+        }
+
+        #status {
+            margin: 12px 0;
+        }
+
+        #result {
+            margin-top: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <h3>Stream Music Identifier</h3>
+    <div id="status">Idle</div>
+    <button id="identify">Identify once</button>
+    <button id="continuous">Start continuous</button>
+    <button id="stop">Stop capture</button>
+    <div id="result"></div>
+    <script type="module" src="./popup.ts"></script>
+</body>
+
+</html>
