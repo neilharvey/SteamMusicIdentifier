@@ -1,11 +1,13 @@
-
-import type { ExtensionMessage } from "../shared/messages";
+import type {
+  ExtensionMessage,
+  ExtensionResponse
+} from "../shared/messages";
 import type { TrackIdentification } from "../shared/models";
 
 const status = document.querySelector<HTMLDivElement>("#status")!;
 const result = document.querySelector<HTMLDivElement>("#result")!;
 
-async function send(message: ExtensionMessage) {
+async function send(message: ExtensionMessage): Promise<ExtensionResponse> {
   return chrome.runtime.sendMessage(message);
 }
 
@@ -16,7 +18,7 @@ async function activeTabId(): Promise<number> {
   });
 
   if (!tab?.id) {
-    throw new Error("Open a Twitch stream before starting capture.");
+    throw new Error("Unable to determine the active tab.");
   }
 
   return tab.id;
@@ -25,8 +27,20 @@ async function activeTabId(): Promise<number> {
 document.querySelector("#identify")!.addEventListener("click", async () => {
   try {
     status.textContent = "Starting capture...";
+
     const tabId = await activeTabId();
-    await send({ type: "START_CAPTURE", tabId, mode: "once" });
+
+    const response = await send({
+      type: "START_CAPTURE",
+      tabId,
+      mode: "once"
+    });
+
+    if (!response.success) {
+      throw new Error(response.error ?? "Failed to start capture.");
+    }
+
+    status.textContent = "Capture request received";
   } catch (e) {
     status.textContent = String(e);
   }
@@ -35,16 +49,37 @@ document.querySelector("#identify")!.addEventListener("click", async () => {
 document.querySelector("#continuous")!.addEventListener("click", async () => {
   try {
     status.textContent = "Starting continuous capture...";
+
     const tabId = await activeTabId();
-    await send({ type: "START_CAPTURE", tabId, mode: "continuous" });
+
+    const response = await send({
+      type: "START_CAPTURE",
+      tabId,
+      mode: "continuous"
+    });
+
+    if (!response.success) {
+      throw new Error(response.error ?? "Failed to start capture.");
+    }
+
+    status.textContent = "Capture request received";
   } catch (e) {
     status.textContent = String(e);
   }
 });
 
 document.querySelector("#stop")!.addEventListener("click", async () => {
-  await send({ type: "STOP_CAPTURE" });
-  status.textContent = "Stopped";
+  try {
+    const response = await send({ type: "STOP_CAPTURE" });
+
+    if (!response.success) {
+      throw new Error(response.error ?? "Failed to stop capture.");
+    }
+
+    status.textContent = "Stopped";
+  } catch (e) {
+    status.textContent = String(e);
+  }
 });
 
 chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
@@ -59,17 +94,22 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
 
 function showResult(track: TrackIdentification) {
   result.innerHTML = "";
+
   const title = document.createElement("strong");
   title.textContent = track.title;
+
   const artist = document.createElement("div");
   artist.textContent = track.artist;
+
   result.append(title, artist);
+
   if (track.songLink) {
     const link = document.createElement("a");
     link.href = track.songLink;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
     link.textContent = "Open track";
+
     result.append(document.createElement("br"), link);
   }
 }

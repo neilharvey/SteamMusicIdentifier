@@ -1,26 +1,12 @@
-
-type CaptureMode = "single" | "continuous";
-
-interface StartCaptureMessage {
-  type: "START_CAPTURE";
-  targetTabId: number;
-  mode: CaptureMode;
-}
-
-interface StopCaptureMessage {
-  type: "STOP_CAPTURE";
-}
-
-type PopupMessage = StartCaptureMessage | StopCaptureMessage;
-
-interface CaptureResponse {
-  success: boolean;
-  error?: string;
-}
+import type {
+  ExtensionMessage,
+  ExtensionResponse,
+  OffscreenCommand
+} from "../shared/messages";
 
 async function ensureOffscreenDocument(): Promise<void> {
   const contexts = await chrome.runtime.getContexts({
-    contextTypes: ["OFFSCREEN_DOCUMENT"],
+    contextTypes: ["OFFSCREEN_DOCUMENT"]
   });
 
   if (contexts.length > 0) {
@@ -30,25 +16,22 @@ async function ensureOffscreenDocument(): Promise<void> {
   await chrome.offscreen.createDocument({
     url: "offscreen/offscreen.html",
     reasons: ["USER_MEDIA"],
-    justification:
-      "Capture and process audio from the active browser tab.",
+    justification: "Capture and process audio from the active browser tab."
   });
 }
 
-function getMediaStreamId(targetTabId: number): Promise<string> {
+function getMediaStreamId(tabId: number): Promise<string> {
   return new Promise((resolve, reject) => {
     chrome.tabCapture.getMediaStreamId(
-      { targetTabId },
+      { targetTabId: tabId },
       (streamId) => {
-        const error = chrome.runtime.lastError;
-
-        if (error) {
-          reject(new Error(error.message));
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
           return;
         }
 
         if (!streamId) {
-          reject(new Error("No media stream ID was returned."));
+          reject(new Error("Chrome did not provide a media stream ID."));
           return;
         }
 
@@ -58,62 +41,75 @@ function getMediaStreamId(targetTabId: number): Promise<string> {
   });
 }
 
-async function startCapture(
-  message: StartCaptureMessage
-): Promise<void> {
-  await ensureOffscreenDocument();
-
-  const streamId = await getMediaStreamId(message.targetTabId);
-
-  await chrome.runtime.sendMessage({
-    type: "CAPTURE_STARTED",
-    streamId,
-    mode: message.mode,
-  });
-}
-
-async function stopCapture(): Promise<void> {
-  await chrome.runtime.sendMessage({
-    type: "OFFSCREEN_STOP",
-  });
-}
-
 chrome.runtime.onMessage.addListener(
   (
-    message: PopupMessage,
+    message: ExtensionMessage,
     _sender,
-    sendResponse: (response: CaptureResponse) => void
+    sendResponse: (response: ExtensionResponse) => void
   ): boolean => {
-    if (
-      message?.type !== "START_CAPTURE" &&
-      message?.type !== "STOP_CAPTURE"
-    ) {
-      return false;
+    switch (message.type) {
+      case "START_CAPTURE":
+        void startCapture(message.tabId, message.mode, sendResponse);
+        return true;
+
+      case "STOP_CAPTURE":
+        void stopCapture(sendResponse);
+        return true;
+
+      default:
+        return false;
     }
-
-    const handleMessage = async (): Promise<void> => {
-      try {
-        if (message.type === "START_CAPTURE") {
-          await startCapture(message);
-        } else {
-          await stopCapture();
-        }
-
-        sendResponse({ success: true });
-      } catch (error) {
-        sendResponse({
-          success: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "An unexpected error occurred.",
-        });
-      }
-    };
-
-    void handleMessage();
-
-    // Keep the message channel open for the async response.
-    return true;
   }
 );
+
+async function startCapture(
+  tabId: number,
+  mode: "once" | "continuous",
+  sendResponse: (response: ExtensionResponse) => void
+): Promise<void> {
+  try {
+    await ensureOffscreenDocument();
+
+    const streamId = await getMediaStreamId(tabId);
+
+    const command: OffscreenCommand = {
+      type: "CAPTURE_STARTED",
+      streamId,
+      mode
+    };
+
+    await chrome.runtime.sendMessage(command);
+
+    sendResponse({ success: true });
+  } catch (error) {
+    console.error("Failed to start capture:", error);
+
+    sendResponse({
+      success: false,
+      error: error instanceof Error
+        ? error.message
+        : "Failed to start audio capture."
+    });
+  }
+}
+
+async function stopCapture(
+  sendResponse: (response: ExtensionResponse) => void
+): Promise<void> {
+  try {
+    await chrome.runtime.sendMessage({
+      type: "OFFSCREEN_STOP"
+    } satisfies OffscreenCommand);
+
+    sendResponse({ success: true });
+  } catch (error) {
+    console.error("Failed to stop capture:", error);
+
+    sendResponse({
+      success: false,
+      error: error instanceof Error
+        ? error.message
+        : "Failed to stop audio capture."
+    });
+  }
+}

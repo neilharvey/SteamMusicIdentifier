@@ -1,4 +1,3 @@
-
 /** The type of audio identification session. */
 export type CaptureMode = "once" | "continuous";
 

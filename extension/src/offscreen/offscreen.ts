@@ -1,178 +1,125 @@
+import type {
+  ExtensionMessage
+} from "../shared/messages";
+import type {
+  CaptureState
+} from "../shared/models";
 
-import type { ExtensionMessage } from "../shared/messages";
-import type { CaptureMode, TrackIdentification } from "../shared/models";
-
-const API_URL = "https://localhost:7043/api/identifications";
-const CLIP_LENGTH_MS = 12_000;
-
-let stream: MediaStream | undefined;
 let audioContext: AudioContext | undefined;
-let recorder: MediaRecorder | undefined;
-let mode: CaptureMode = "once";
-let active = false;
-let identifying = false;
-let clipTimer: ReturnType<typeof setTimeout> | undefined;
+let mediaStream: MediaStream | undefined;
+let analyser: AnalyserNode | undefined;
+let monitorTimer: number | undefined;
 
-chrome.runtime.onMessage.addListener(
-  (message: ExtensionMessage) => {
-    if (message.type === "CAPTURE_STARTED") {
-      void startCapture(message.streamId, message.mode);
-    }
+chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
+  switch (message.type) {
+    case "CAPTURE_STARTED":
+      void startCapture(message.streamId);
+      break;
 
-    if (message.type === "OFFSCREEN_STOP") {
-    void stopCapture();
-    }
+    case "OFFSCREEN_STOP":
+      stopCapture();
+      break;
   }
-);
+});
 
-async function startCapture(
-  streamId: string,
-  captureMode: CaptureMode
-) {
-  if (active) await stopCapture();
-
-  mode = captureMode;
-  active = true;
-
+async function startCapture(streamId: string): Promise<void> {
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
+    await reportState("starting");
+
+    audioContext = new AudioContext();
+
+    if (audioContext.state === "suspended") {
+      await audioContext.resume();
+    }
+
+    mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         mandatory: {
           chromeMediaSource: "tab",
           chromeMediaSourceId: streamId
-        } as MediaTrackConstraints
-      } as MediaTrackConstraints,
-      video: false
+        }
+      } as MediaTrackConstraints
     });
 
-    audioContext = new AudioContext();
-    const source = audioContext.createMediaStreamSource(stream);
+    const source = audioContext.createMediaStreamSource(mediaStream);
 
-    // Preserve the user's normal stream audio output.
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 2048;
+
+    source.connect(analyser);
     source.connect(audioContext.destination);
 
-    await audioContext.resume();
+    await reportState("capturing");
 
-    notifyState("capturing");
-    recordNextClip();
+    startAudioMonitoring();
   } catch (error) {
-    active = false;
-    notifyState("error", String(error));
-    await stopCapture();
+    console.error("Failed to capture audio:", error);
+
+    await reportState(
+      "error",
+      error instanceof Error
+        ? error.message
+        : "Failed to capture audio."
+    );
   }
 }
 
-function recordNextClip() {
-  if (!active || identifying) return;
+function startAudioMonitoring(): void {
+  if (!analyser) {
+    return;
+  }
 
-  if (!stream) return;
+  const buffer = new Uint8Array(analyser.fftSize);
 
-  const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-    ? "audio/webm;codecs=opus"
-    : "audio/webm";
+  const monitor = () => {
+    if (!analyser) {
+      return;
+    }
 
-  recorder = new MediaRecorder(stream, { mimeType });
-  const chunks: Blob[] = [];
+    analyser.getByteTimeDomainData(buffer);
 
-  recorder.ondataavailable = event => {
-    if (event.data.size > 0) chunks.push(event.data);
+    let sum = 0;
+
+    for (const value of buffer) {
+      const sample = (value - 128) / 128;
+      sum += sample * sample;
+    }
+
+    const rms = Math.sqrt(sum / buffer.length);
+
+    console.log("Audio level:", rms.toFixed(4));
+
+    monitorTimer = window.setTimeout(monitor, 500);
   };
 
-  recorder.onstop = async () => {
-    if (!active) return;
-
-    const clip = new Blob(chunks, { type: mimeType });
-
-    if (clip.size > 0) {
-      identifying = true;
-      notifyState("identifying");
-
-      try {
-        const track = await identify(clip);
-        if (track) {
-          await saveResult(track);
-        }
-      } catch (error) {
-        notifyState("error", String(error));
-      } finally {
-        identifying = false;
-      }
-    }
-
-    if (mode === "once") {
-      await stopCapture();
-    } else if (active) {
-      notifyState("capturing");
-      recordNextClip();
-    }
-  };
-
-  recorder.start();
-
-  clipTimer = setTimeout(() => {
-    if (recorder?.state === "recording") {
-      recorder.stop();
-    }
-  }, CLIP_LENGTH_MS);
+  monitor();
 }
 
-async function identify(clip: Blob): Promise<TrackIdentification | null> {
-  const form = new FormData();
-  form.append("audio", clip, "clip.webm");
-
-  const response = await fetch(API_URL, {
-    method: "POST",
-    body: form
-  });
-
-  if (!response.ok) {
-    throw new Error(`Recognition failed: ${response.status}`);
+function stopCapture(): void {
+  if (monitorTimer !== undefined) {
+    window.clearTimeout(monitorTimer);
+    monitorTimer = undefined;
   }
 
-  const result = await response.json();
+  mediaStream?.getTracks().forEach((track) => track.stop());
+  mediaStream = undefined;
 
-  return result as TrackIdentification | null;
-}
-
-async function saveResult(track: TrackIdentification) {
-  await chrome.storage.local.set({
-    lastIdentifiedTrack: track
-  });
-
-  await chrome.runtime.sendMessage({
-    type: "IDENTIFICATION_RESULT",
-    result: track
-  } satisfies ExtensionMessage);
-}
-
-async function stopCapture() {
-  active = false;
-
-  if (clipTimer) clearTimeout(clipTimer);
-  clipTimer = undefined;
-
-  if (recorder?.state === "recording") {
-    recorder.stop();
-  }
-
-  stream?.getTracks().forEach(track => track.stop());
-  stream = undefined;
+  analyser?.disconnect();
+  analyser = undefined;
 
   if (audioContext) {
-    await audioContext.close();
+    void audioContext.close();
     audioContext = undefined;
   }
 
-  recorder = undefined;
-  identifying = false;
-  notifyState("idle");
+  void reportState("idle");
 }
 
-function notifyState(
-  state: "idle" | "capturing" | "identifying" | "error",
+async function reportState(
+  state: CaptureState,
   error?: string
-) {
-  void chrome.runtime.sendMessage({
+): Promise<void> {
+  await chrome.runtime.sendMessage({
     type: "CAPTURE_STATE",
     state,
     error
