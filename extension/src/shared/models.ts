@@ -23,3 +23,22 @@ export interface IdentificationHistoryItem
   extends TrackIdentification {
   id: string;
 }
+
+
+/** A single chunk of captured, uncompressed PCM audio. */
+export interface AudioChunk {
+  /** Zero-based position of this chunk within the capture session. */
+  sequenceNumber: number;
+
+  /** Number of samples per second, e.g. 48000. */
+  sampleRate: number;
+
+  /** Number of audio channels. The current pipeline produces mono. */
+  channels: 1;
+
+  /** Sample encoding used by the samples buffer. */
+  sampleFormat: "float32";
+
+  /** Mono audio samples, normalized to the range -1.0 to 1.0. */
+  samples: Float32Array;
+}

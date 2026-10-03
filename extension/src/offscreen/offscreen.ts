@@ -4,6 +4,7 @@ import type {
 import type {
   CaptureState
 } from "../shared/models";
+import type { AudioChunk } from "../shared/models";
 
 let audioContext: AudioContext | undefined;
 let mediaStream: MediaStream | undefined;
@@ -57,24 +58,39 @@ async function startCapture(streamId: string): Promise<void> {
       "pcm-processor"
     );
 
-    workletNode.port.onmessage = (event: MessageEvent) => {
-      const message = event.data as {
+    workletNode.port.onmessage = (
+      event: MessageEvent<{
         type: string;
+        sequenceNumber: number;
         sampleRate: number;
-        channels: number;
-        duration: number;
+        channels: 1;
+        sampleFormat: "float32";
         samples: Float32Array;
-      };
-
-      if (message.type === "PCM_CHUNK") {
-        console.log("PCM chunk received:", {
-          sampleRate: message.sampleRate,
-          channels: message.channels,
-          duration: message.duration,
-          sampleCount: message.samples.length,
-          byteLength: message.samples.byteLength
-        });
+      }>
+    ) => {
+      const message = event.data;
+    
+      if (message.type !== "PCM_CHUNK") {
+        return;
       }
+    
+      const chunk: AudioChunk = {
+        sequenceNumber: message.sequenceNumber,
+        sampleRate: message.sampleRate,
+        channels: message.channels,
+        sampleFormat: message.sampleFormat,
+        samples: message.samples
+      };
+    
+      console.log("PCM chunk received:", {
+        sequenceNumber: chunk.sequenceNumber,
+        sampleRate: chunk.sampleRate,
+        channels: chunk.channels,
+        sampleFormat: chunk.sampleFormat,
+        sampleCount: chunk.samples.length,
+        durationSeconds: chunk.samples.length / chunk.sampleRate,
+        byteLength: chunk.samples.byteLength
+      });
     };
 
     source.connect(analyser);

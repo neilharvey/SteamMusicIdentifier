@@ -10,6 +10,7 @@ class PcmProcessor extends AudioWorkletProcessor {
 
     this.buffer = new Float32Array(this.chunkSize);
     this.offset = 0;
+    this.sequenceNumber = 0;
   }
 
   process(inputs, outputs) {
@@ -53,9 +54,10 @@ class PcmProcessor extends AudioWorkletProcessor {
         this.port.postMessage(
           {
             type: "PCM_CHUNK",
+            sequenceNumber: this.sequenceNumber++,
             sampleRate,
             channels: 1,
-            duration: CHUNK_DURATION_SECONDS,
+            sampleFormat: "float32",
             samples: chunk
           },
           [chunk.buffer]
