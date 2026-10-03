@@ -1,19 +1,22 @@
 import type { AudioChunk } from "../shared/models";
+import type { MusicIdentificationService } from "../shared/music-identification";
 
-/**
- * Receives a completed PCM chunk for processing.
- *
- * Replace this implementation with the music-identification
- * integration when that part of the application is ready.
- */
-export function consumeAudioChunk(chunk: AudioChunk): void {
-  console.log("Consuming audio chunk:", {
-    sequenceNumber: chunk.sequenceNumber,
-    sampleRate: chunk.sampleRate,
-    channels: chunk.channels,
-    sampleFormat: chunk.sampleFormat,
-    sampleCount: chunk.samples.length,
-    durationSeconds: chunk.samples.length / chunk.sampleRate,
-    byteLength: chunk.samples.byteLength
-  });
+export class AudioChunkConsumer {
+  constructor(
+    private readonly identificationService: MusicIdentificationService
+  ) {}
+
+  async consume(chunk: AudioChunk): Promise<void> {
+    const result = await this.identificationService.identify(chunk);
+
+    if (result === null) {
+      console.log("No track identified:", {
+        sequenceNumber: chunk.sequenceNumber
+      });
+
+      return;
+    }
+
+    console.log("Track identified:", result);
+  }
 }

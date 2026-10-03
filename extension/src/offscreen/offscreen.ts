@@ -1,7 +1,14 @@
 import type {
   ExtensionMessage
 } from "../shared/messages";
-import { consumeAudioChunk } from "./audio-chunk-consumer";
+import { AudioChunkConsumer } from "./audio-chunk-consumer";
+import { NoOpMusicIdentificationService } from "./no-op-music-identification-service";
+
+const identificationService =
+  new NoOpMusicIdentificationService();
+
+const chunkConsumer =
+  new AudioChunkConsumer(identificationService);
 
 import type {
   CaptureMode,
@@ -221,7 +228,7 @@ async function handleAudioChunk(chunk: AudioChunk): Promise<void> {
       return;
     }
 
-    consumeAudioChunk(chunk);
+    await chunkConsumer.consume(chunk);
 
     // One complete chunk has been consumed; end this session.
     stopAudioResources();
@@ -232,5 +239,5 @@ async function handleAudioChunk(chunk: AudioChunk): Promise<void> {
   }
 
   // Continuous mode: consume each chunk and keep capturing.
-  consumeAudioChunk(chunk);
+  await chunkConsumer.consume(chunk);
 }
