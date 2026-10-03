@@ -7,7 +7,9 @@ import type {
 
 let audioContext: AudioContext | undefined;
 let mediaStream: MediaStream | undefined;
+let source: MediaStreamAudioSourceNode | undefined;
 let analyser: AnalyserNode | undefined;
+let workletNode: AudioWorkletNode | undefined;
 let monitorTimer: number | undefined;
 
 chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
@@ -32,6 +34,10 @@ async function startCapture(streamId: string): Promise<void> {
       await audioContext.resume();
     }
 
+    await audioContext.audioWorklet.addModule(
+      chrome.runtime.getURL("audio/pcm-processor.js")
+    );
+
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         mandatory: {
@@ -41,19 +47,47 @@ async function startCapture(streamId: string): Promise<void> {
       } as MediaTrackConstraints
     });
 
-    const source = audioContext.createMediaStreamSource(mediaStream);
+    source = audioContext.createMediaStreamSource(mediaStream);
 
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 2048;
 
+    workletNode = new AudioWorkletNode(
+      audioContext,
+      "pcm-processor"
+    );
+
+    workletNode.port.onmessage = (event: MessageEvent) => {
+      const message = event.data as {
+        type: string;
+        sampleRate: number;
+        channels: number;
+        duration: number;
+        samples: Float32Array;
+      };
+
+      if (message.type === "PCM_CHUNK") {
+        console.log("PCM chunk received:", {
+          sampleRate: message.sampleRate,
+          channels: message.channels,
+          duration: message.duration,
+          sampleCount: message.samples.length,
+          byteLength: message.samples.byteLength
+        });
+      }
+    };
+
     source.connect(analyser);
-    source.connect(audioContext.destination);
+    source.connect(workletNode);
+    workletNode.connect(audioContext.destination);
 
     await reportState("capturing");
 
     startAudioMonitoring();
   } catch (error) {
     console.error("Failed to capture audio:", error);
+
+    stopAudioResources();
 
     await reportState(
       "error",
@@ -91,7 +125,7 @@ function startAudioMonitoring(): void {
       type: "AUDIO_LEVEL",
       level: rms
     } satisfies ExtensionMessage).catch(() => {
-      // The popup may have closed; audio capture should continue.
+      // The popup may have closed; capture continues.
     });
 
     monitorTimer = window.setTimeout(monitor, 500);
@@ -100,23 +134,35 @@ function startAudioMonitoring(): void {
   monitor();
 }
 
-function stopCapture(): void {
+function stopAudioResources(): void {
   if (monitorTimer !== undefined) {
     window.clearTimeout(monitorTimer);
     monitorTimer = undefined;
   }
 
-  mediaStream?.getTracks().forEach((track) => track.stop());
-  mediaStream = undefined;
+  if (workletNode) {
+    workletNode.port.onmessage = null;
+    workletNode.disconnect();
+    workletNode = undefined;
+  }
+
+  source?.disconnect();
+  source = undefined;
 
   analyser?.disconnect();
   analyser = undefined;
+
+  mediaStream?.getTracks().forEach((track) => track.stop());
+  mediaStream = undefined;
 
   if (audioContext) {
     void audioContext.close();
     audioContext = undefined;
   }
+}
 
+function stopCapture(): void {
+  stopAudioResources();
   void reportState("idle");
 }
 
