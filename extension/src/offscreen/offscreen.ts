@@ -87,7 +87,12 @@ function startAudioMonitoring(): void {
 
     const rms = Math.sqrt(sum / buffer.length);
 
-    console.log("Audio level:", rms.toFixed(4));
+    void chrome.runtime.sendMessage({
+      type: "AUDIO_LEVEL",
+      level: rms
+    } satisfies ExtensionMessage).catch(() => {
+      // The popup may have closed; audio capture should continue.
+    });
 
     monitorTimer = window.setTimeout(monitor, 500);
   };

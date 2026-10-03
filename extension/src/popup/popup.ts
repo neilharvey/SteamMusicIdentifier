@@ -2,12 +2,50 @@ import type {
   ExtensionMessage,
   ExtensionResponse
 } from "../shared/messages";
-import type { TrackIdentification } from "../shared/models";
+import type {
+  TrackIdentification
+} from "../shared/models";
 
 const status = document.querySelector<HTMLDivElement>("#status")!;
 const result = document.querySelector<HTMLDivElement>("#result")!;
 
-async function send(message: ExtensionMessage): Promise<ExtensionResponse> {
+// Create the audio meter.
+const meterContainer = document.createElement("div");
+meterContainer.style.marginTop = "12px";
+
+const meterLabel = document.createElement("div");
+meterLabel.textContent = "Audio level: 0.0000";
+meterLabel.style.marginBottom = "4px";
+
+const meterTrack = document.createElement("div");
+meterTrack.style.width = "100%";
+meterTrack.style.height = "12px";
+meterTrack.style.backgroundColor = "#ddd";
+meterTrack.style.borderRadius = "6px";
+meterTrack.style.overflow = "hidden";
+
+const meterBar = document.createElement("div");
+meterBar.style.width = "0%";
+meterBar.style.height = "100%";
+meterBar.style.backgroundColor = "#238636";
+meterBar.style.transition = "width 0.2s ease";
+
+meterTrack.append(meterBar);
+meterContainer.append(meterLabel, meterTrack);
+status.insertAdjacentElement("afterend", meterContainer);
+
+function updateAudioLevel(level: number): void {
+  // Scale the display so that typical audio levels are visible.
+  const displayLevel = Math.max(0, Math.min(level, 0.25));
+  const percentage = (displayLevel / 0.25) * 100;
+
+  meterBar.style.width = `${percentage}%`;
+  meterLabel.textContent = `Audio level: ${level.toFixed(4)}`;
+}
+
+async function send(
+  message: ExtensionMessage
+): Promise<ExtensionResponse> {
   return chrome.runtime.sendMessage(message);
 }
 
@@ -41,8 +79,8 @@ document.querySelector("#identify")!.addEventListener("click", async () => {
     }
 
     status.textContent = "Capture request received";
-  } catch (e) {
-    status.textContent = String(e);
+  } catch (error) {
+    status.textContent = String(error);
   }
 });
 
@@ -63,8 +101,8 @@ document.querySelector("#continuous")!.addEventListener("click", async () => {
     }
 
     status.textContent = "Capture request received";
-  } catch (e) {
-    status.textContent = String(e);
+  } catch (error) {
+    status.textContent = String(error);
   }
 });
 
@@ -77,22 +115,32 @@ document.querySelector("#stop")!.addEventListener("click", async () => {
     }
 
     status.textContent = "Stopped";
-  } catch (e) {
-    status.textContent = String(e);
+  } catch (error) {
+    status.textContent = String(error);
   }
 });
 
 chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
-  if (message.type === "CAPTURE_STATE") {
-    status.textContent = message.error ?? message.state;
-  }
+  switch (message.type) {
+    case "CAPTURE_STATE":
+      status.textContent = message.error ?? message.state;
 
-  if (message.type === "IDENTIFICATION_RESULT") {
-    showResult(message.result);
+      if (message.state === "idle") {
+        updateAudioLevel(0);
+      }
+      break;
+
+    case "AUDIO_LEVEL":
+      updateAudioLevel(message.level);
+      break;
+
+    case "IDENTIFICATION_RESULT":
+      showResult(message.result);
+      break;
   }
 });
 
-function showResult(track: TrackIdentification) {
+function showResult(track: TrackIdentification): void {
   result.innerHTML = "";
 
   const title = document.createElement("strong");

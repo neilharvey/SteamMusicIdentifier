@@ -26,12 +26,16 @@ export type OffscreenCommand =
       type: "OFFSCREEN_STOP";
     };
 
-/** Messages sent from the offscreen document to the popup. */
+/** Messages sent from the offscreen document to other extension contexts. */
 export type OffscreenEvent =
   | {
       type: "CAPTURE_STATE";
       state: CaptureState;
       error?: string;
+    }
+  | {
+      type: "AUDIO_LEVEL";
+      level: number;
     }
   | {
       type: "IDENTIFICATION_RESULT";
