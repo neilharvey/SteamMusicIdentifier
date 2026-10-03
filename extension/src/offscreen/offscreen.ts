@@ -1,10 +1,13 @@
 import type {
   ExtensionMessage
 } from "../shared/messages";
+import { consumeAudioChunk } from "./audio-chunk-consumer";
+
 import type {
-  CaptureState
+  CaptureMode,
+  CaptureState,
+  AudioChunk
 } from "../shared/models";
-import type { AudioChunk } from "../shared/models";
 
 let audioContext: AudioContext | undefined;
 let mediaStream: MediaStream | undefined;
@@ -12,11 +15,13 @@ let source: MediaStreamAudioSourceNode | undefined;
 let analyser: AnalyserNode | undefined;
 let workletNode: AudioWorkletNode | undefined;
 let monitorTimer: number | undefined;
+let captureMode: CaptureMode | undefined;
+let processingOnce = false;
 
 chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
   switch (message.type) {
     case "CAPTURE_STARTED":
-      void startCapture(message.streamId);
+      void startCapture(message.streamId, message.mode);
       break;
 
     case "OFFSCREEN_STOP":
@@ -25,7 +30,12 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
   }
 });
 
-async function startCapture(streamId: string): Promise<void> {
+async function startCapture(
+  streamId: string,
+  mode: CaptureMode
+): Promise<void> {
+  captureMode = mode;
+  processingOnce = false;
   try {
     await reportState("starting");
 
@@ -82,15 +92,7 @@ async function startCapture(streamId: string): Promise<void> {
         samples: message.samples
       };
     
-      console.log("PCM chunk received:", {
-        sequenceNumber: chunk.sequenceNumber,
-        sampleRate: chunk.sampleRate,
-        channels: chunk.channels,
-        sampleFormat: chunk.sampleFormat,
-        sampleCount: chunk.samples.length,
-        durationSeconds: chunk.samples.length / chunk.sampleRate,
-        byteLength: chunk.samples.byteLength
-      });
+      void handleAudioChunk(chunk);
     };
 
     source.connect(analyser);
@@ -102,9 +104,11 @@ async function startCapture(streamId: string): Promise<void> {
     startAudioMonitoring();
   } catch (error) {
     console.error("Failed to capture audio:", error);
-
+  
+    captureMode = undefined;
+    processingOnce = false;
     stopAudioResources();
-
+  
     await reportState(
       "error",
       error instanceof Error
@@ -178,6 +182,9 @@ function stopAudioResources(): void {
 }
 
 function stopCapture(): void {
+  captureMode = undefined;
+  processingOnce = false;
+
   stopAudioResources();
   void reportState("idle");
 }
@@ -191,4 +198,39 @@ async function reportState(
     state,
     error
   } satisfies ExtensionMessage);
+}
+
+
+async function handleAudioChunk(chunk: AudioChunk): Promise<void> {
+  if (captureMode === undefined) {
+    return;
+  }
+
+  if (captureMode === "once") {
+    // Prevent another chunk being processed while this one completes.
+    if (processingOnce) {
+      return;
+    }
+
+    processingOnce = true;
+
+    await reportState("identifying");
+
+    // The user may have stopped capture while the state was updating.
+    if (captureMode !== "once") {
+      return;
+    }
+
+    consumeAudioChunk(chunk);
+
+    // One complete chunk has been consumed; end this session.
+    stopAudioResources();
+    captureMode = undefined;
+
+    await reportState("idle");
+    return;
+  }
+
+  // Continuous mode: consume each chunk and keep capturing.
+  consumeAudioChunk(chunk);
 }
