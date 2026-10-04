@@ -149,15 +149,26 @@ function showResult(track: TrackIdentification): void {
   const artist = document.createElement("div");
   artist.textContent = track.artist;
 
+  if (track.album) {
+    const album = document.createElement("div");
+    album.textContent = track.album;
+    result.append(album);
+  }  
+
   result.append(title, artist);
 
-  if (track.songLink) {
-    const link = document.createElement("a");
-    link.href = track.songLink;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.textContent = "Open track";
+  const copyButton = document.createElement("button");
+  copyButton.textContent = "Copy song details";
 
-    result.append(document.createElement("br"), link);
-  }
+  copyButton.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(`${track.title}\n${track.artist}`);
+      copyButton.textContent = "Copied!";
+    } catch (error) {
+      console.error("Failed to copy song details:", error);
+      copyButton.textContent = "Copy failed";
+    }
+  });
+
+  result.append(copyButton);
 }

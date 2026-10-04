@@ -210,6 +210,7 @@ async function reportState(
 }
 
 
+
 async function handleAudioChunk(chunk: AudioChunk): Promise<void> {
   if (captureMode === undefined) {
     return;
@@ -230,16 +231,50 @@ async function handleAudioChunk(chunk: AudioChunk): Promise<void> {
       return;
     }
 
-    await chunkConsumer.consume(chunk);
+    try {
+      const result = await chunkConsumer.consume(chunk);
+
+      if (result !== null) {
+        await chrome.runtime.sendMessage({
+          type: "IDENTIFICATION_RESULT",
+          result
+        } satisfies ExtensionMessage);
+      }
+    } catch (error) {
+      console.error("Failed to identify audio:", error);
+      await reportState(
+        "error",
+        error instanceof Error
+          ? error.message
+          : "Failed to identify audio."
+      );
+    }
 
     // One complete chunk has been consumed; end this session.
     stopAudioResources();
     captureMode = undefined;
-
     await reportState("idle");
+
     return;
   }
 
   // Continuous mode: consume each chunk and keep capturing.
-  await chunkConsumer.consume(chunk);
+  try {
+    const result = await chunkConsumer.consume(chunk);
+
+    if (result !== null) {
+      await chrome.runtime.sendMessage({
+        type: "IDENTIFICATION_RESULT",
+        result
+      } satisfies ExtensionMessage);
+    }
+  } catch (error) {
+    console.error("Failed to identify audio:", error);
+    await reportState(
+      "error",
+      error instanceof Error
+        ? error.message
+        : "Failed to identify audio."
+    );
+  }
 }
