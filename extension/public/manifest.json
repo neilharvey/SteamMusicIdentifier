@@ -17,5 +17,8 @@
     "default_title": "Identify stream music",
     "default_popup": "popup/popup.html"
   },
-  "options_page": "options/options.html"
+  "options_page": "options/options.html",
+  "host_permissions": [
+    "https://api.audd.io/*"
+  ]  
 }

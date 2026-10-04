@@ -4,6 +4,9 @@ import type {
   OffscreenCommand
 } from "../shared/messages";
 
+import { ProviderSettingsStore } from "../settings/provider-settings-store";
+import type { ProviderSettings } from "../shared/provider-settings";
+
 async function ensureOffscreenDocument(): Promise<void> {
   const contexts = await chrome.runtime.getContexts({
     contextTypes: ["OFFSCREEN_DOCUMENT"]
@@ -43,9 +46,9 @@ function getMediaStreamId(tabId: number): Promise<string> {
 
 chrome.runtime.onMessage.addListener(
   (
-    message: ExtensionMessage,
+    message: ExtensionMessage | { type: "GET_PROVIDER_SETTINGS" },
     _sender,
-    sendResponse: (response: ExtensionResponse) => void
+    sendResponse: (response: ExtensionResponse | ProviderSettings | null) => void
   ): boolean => {
     switch (message.type) {
       case "START_CAPTURE":
@@ -54,6 +57,10 @@ chrome.runtime.onMessage.addListener(
 
       case "STOP_CAPTURE":
         void stopCapture(sendResponse);
+        return true;
+
+      case "GET_PROVIDER_SETTINGS":
+        void getProviderSettings(sendResponse);
         return true;
 
       default:
@@ -111,5 +118,19 @@ async function stopCapture(
         ? error.message
         : "Failed to stop audio capture."
     });
+  }
+}
+
+async function getProviderSettings(
+  sendResponse: (response: ProviderSettings | null) => void
+): Promise<void> {
+  try {
+    const settingsStore = new ProviderSettingsStore();
+    const settings = await settingsStore.get();
+
+    sendResponse(settings);
+  } catch (error) {
+    console.error("Failed to retrieve provider settings:", error);
+    sendResponse(null);
   }
 }

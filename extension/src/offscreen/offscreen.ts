@@ -2,10 +2,12 @@ import type {
   ExtensionMessage
 } from "../shared/messages";
 import { AudioChunkConsumer } from "./audio-chunk-consumer";
-import { LogWavMusicIdentificationService } from "./log-wav-music-identification-service";
+import { ProviderSettingsClient } from "../settings/provider-settings-client";
+import { AuddMusicIdentificationService } from "../providers/audd/audd-music-identification-service";
 
+const settingsClient = new ProviderSettingsClient();
 const identificationService =
-  new LogWavMusicIdentificationService();
+  new AuddMusicIdentificationService(settingsClient);
 
 const chunkConsumer =
   new AudioChunkConsumer(identificationService);
