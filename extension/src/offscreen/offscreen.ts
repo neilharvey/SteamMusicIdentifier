@@ -2,10 +2,10 @@ import type {
   ExtensionMessage
 } from "../shared/messages";
 import { AudioChunkConsumer } from "./audio-chunk-consumer";
-import { NoOpMusicIdentificationService } from "./no-op-music-identification-service";
+import { LogWavMusicIdentificationService } from "./log-wav-music-identification-service";
 
 const identificationService =
-  new NoOpMusicIdentificationService();
+  new LogWavMusicIdentificationService();
 
 const chunkConsumer =
   new AudioChunkConsumer(identificationService);
