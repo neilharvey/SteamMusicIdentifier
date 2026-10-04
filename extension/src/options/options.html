@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stream Music Identifier - Settings</title>
+  </head>
+  <body>
+    <main>
+      <h1>Stream Music Identifier</h1>
+      <h2>Settings</h2>
+
+      <form id="settings-form">
+        <div>
+          <label for="provider">Recognition provider</label>
+          <select id="provider" disabled>
+            <option value="audd">AudD</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="api-token">AudD API token</label>
+          <input
+            id="api-token"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            required
+          />
+        </div>
+
+        <div>
+          <button type="submit">Save settings</button>
+          <button type="button" id="clear-button">Clear</button>
+        </div>
+      </form>
+
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+
+    <script type="module" src="./options.ts"></script>
+  </body>
+</html>

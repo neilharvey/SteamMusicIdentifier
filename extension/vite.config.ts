@@ -1,4 +1,3 @@
-
 import { defineConfig } from "vite";
 import { resolve } from "node:path";
 
@@ -24,6 +23,10 @@ export default defineConfig({
         "popup/popup": resolve(
           __dirname,
           "src/popup/popup.html"
+        ),
+        "options/options": resolve(
+          __dirname,
+          "src/options/options.html"
         )
       },
 
