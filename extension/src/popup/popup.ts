@@ -2,9 +2,7 @@ import type {
   ExtensionMessage,
   ExtensionResponse
 } from "../shared/messages";
-import type {
-  TrackIdentification
-} from "../shared/models";
+import type { TrackIdentification } from "../shared/models";
 
 const status = document.querySelector<HTMLDivElement>("#status")!;
 const result = document.querySelector<HTMLDivElement>("#result")!;
@@ -32,10 +30,10 @@ meterBar.style.transition = "width 0.2s ease";
 
 meterTrack.append(meterBar);
 meterContainer.append(meterLabel, meterTrack);
+
 status.insertAdjacentElement("afterend", meterContainer);
 
 function updateAudioLevel(level: number): void {
-  // Scale the display so that typical audio levels are visible.
   const displayLevel = Math.max(0, Math.min(level, 0.25));
   const percentage = (displayLevel / 0.25) * 100;
 
@@ -43,30 +41,69 @@ function updateAudioLevel(level: number): void {
   meterLabel.textContent = `Audio level: ${level.toFixed(4)}`;
 }
 
-async function send(
-  message: ExtensionMessage
-): Promise<ExtensionResponse> {
+async function send(message: ExtensionMessage): Promise<ExtensionResponse> {
   return chrome.runtime.sendMessage(message);
 }
 
 async function activeTabId(): Promise<number> {
-  const [tab] = await chrome.tabs.query({
+  const tabs = await chrome.tabs.query({
     active: true,
     currentWindow: true
   });
 
-  if (!tab?.id) {
-    throw new Error("Unable to determine the active tab.");
+  const tab = tabs[0];
+
+  if (tab?.id === undefined) {
+    throw new Error("No active tab found.");
   }
 
   return tab.id;
 }
 
+async function copyTrack(track: TrackIdentification): Promise<void> {
+  const text = `${track.title}\n${track.artist}`;
+
+  await navigator.clipboard.writeText(text);
+}
+
+function showResult(track: TrackIdentification): void {
+  result.innerHTML = "";
+
+  const title = document.createElement("strong");
+  title.textContent = track.title;
+
+  const artist = document.createElement("div");
+  artist.textContent = track.artist;
+
+  result.append(title, artist);
+
+  if (track.album) {
+    const album = document.createElement("div");
+    album.textContent = track.album;
+    result.append(album);
+  }
+
+  const copyButton = document.createElement("button");
+  copyButton.textContent = "Copy song details";
+
+  copyButton.addEventListener("click", async () => {
+    try {
+      await copyTrack(track);
+      copyButton.textContent = "Copied!";
+    } catch (error) {
+      console.error("Failed to copy song details:", error);
+      copyButton.textContent = "Copy failed";
+    }
+  });
+
+  result.append(copyButton);
+}
+
 document.querySelector("#identify")!.addEventListener("click", async () => {
   try {
-    status.textContent = "Starting capture...";
-
     const tabId = await activeTabId();
+
+    status.textContent = "Starting...";
 
     const response = await send({
       type: "START_CAPTURE",
@@ -75,20 +112,20 @@ document.querySelector("#identify")!.addEventListener("click", async () => {
     });
 
     if (!response.success) {
-      throw new Error(response.error ?? "Failed to start capture.");
+      status.textContent = response.error ?? "Failed to start capture.";
     }
-
-    status.textContent = "Capture request received";
   } catch (error) {
-    status.textContent = String(error);
+    console.error("Failed to start identification:", error);
+    status.textContent =
+      error instanceof Error ? error.message : "Failed to start identification.";
   }
 });
 
 document.querySelector("#continuous")!.addEventListener("click", async () => {
   try {
-    status.textContent = "Starting continuous capture...";
-
     const tabId = await activeTabId();
+
+    status.textContent = "Starting...";
 
     const response = await send({
       type: "START_CAPTURE",
@@ -97,26 +134,30 @@ document.querySelector("#continuous")!.addEventListener("click", async () => {
     });
 
     if (!response.success) {
-      throw new Error(response.error ?? "Failed to start capture.");
+      status.textContent = response.error ?? "Failed to start capture.";
     }
-
-    status.textContent = "Capture request received";
   } catch (error) {
-    status.textContent = String(error);
+    console.error("Failed to start continuous identification:", error);
+    status.textContent =
+      error instanceof Error
+        ? error.message
+        : "Failed to start continuous identification.";
   }
 });
 
 document.querySelector("#stop")!.addEventListener("click", async () => {
   try {
-    const response = await send({ type: "STOP_CAPTURE" });
+    const response = await send({
+      type: "STOP_CAPTURE"
+    });
 
     if (!response.success) {
-      throw new Error(response.error ?? "Failed to stop capture.");
+      status.textContent = response.error ?? "Failed to stop capture.";
     }
-
-    status.textContent = "Stopped";
   } catch (error) {
-    status.textContent = String(error);
+    console.error("Failed to stop capture:", error);
+    status.textContent =
+      error instanceof Error ? error.message : "Failed to stop capture.";
   }
 });
 
@@ -128,6 +169,7 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
       if (message.state === "idle") {
         updateAudioLevel(0);
       }
+
       break;
 
     case "AUDIO_LEVEL":
@@ -139,36 +181,3 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
       break;
   }
 });
-
-function showResult(track: TrackIdentification): void {
-  result.innerHTML = "";
-
-  const title = document.createElement("strong");
-  title.textContent = track.title;
-
-  const artist = document.createElement("div");
-  artist.textContent = track.artist;
-
-  if (track.album) {
-    const album = document.createElement("div");
-    album.textContent = track.album;
-    result.append(album);
-  }  
-
-  result.append(title, artist);
-
-  const copyButton = document.createElement("button");
-  copyButton.textContent = "Copy song details";
-
-  copyButton.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(`${track.title}\n${track.artist}`);
-      copyButton.textContent = "Copied!";
-    } catch (error) {
-      console.error("Failed to copy song details:", error);
-      copyButton.textContent = "Copy failed";
-    }
-  });
-
-  result.append(copyButton);
-}

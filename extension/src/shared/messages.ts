@@ -15,6 +15,11 @@ export type PopupMessage =
       type: "STOP_CAPTURE";
     };
 
+/** Messages used to retrieve provider settings. */
+export type SettingsMessage = {
+  type: "GET_PROVIDER_SETTINGS";
+};
+
 /** Messages sent from the service worker to the offscreen document. */
 export type OffscreenCommand =
   | {
@@ -45,6 +50,7 @@ export type OffscreenEvent =
 /** All extension messages. */
 export type ExtensionMessage =
   | PopupMessage
+  | SettingsMessage
   | OffscreenCommand
   | OffscreenEvent;
 
