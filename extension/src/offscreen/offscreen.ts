@@ -1,16 +1,15 @@
 import type {
-  ExtensionMessage
-} from "../shared/messages";
-import { AudioChunkConsumer } from "./audio-chunk-consumer";
-import { ProviderSettingsClient } from "../settings/provider-settings-client";
-import { AuddMusicIdentificationService } from "../providers/audd/audd-music-identification-service";
-
-import type {
   CaptureMode,
   CaptureState,
   AudioChunk,
   TrackIdentification
 } from "../shared/models";
+import type {
+  ExtensionMessage
+} from "../shared/messages";
+import { AudioChunkConsumer } from "./audio-chunk-consumer";
+import { ProviderSettingsClient } from "../settings/provider-settings-client";
+import { AuddMusicIdentificationService } from "../providers/audd/audd-music-identification-service";
 
 const settingsClient = new ProviderSettingsClient();
 const identificationService =
@@ -26,7 +25,8 @@ let analyser: AnalyserNode | undefined;
 let workletNode: AudioWorkletNode | undefined;
 let monitorTimer: number | undefined;
 let captureMode: CaptureMode | undefined;
-let processingOnce = false;
+let identificationInProgress = false;
+let lastIdentifiedTrack: TrackIdentification | undefined;
 
 chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
   switch (message.type) {
@@ -45,7 +45,9 @@ async function startCapture(
   mode: CaptureMode
 ): Promise<void> {
   captureMode = mode;
-  processingOnce = false;
+  identificationInProgress = false;
+  lastIdentifiedTrack = undefined;
+
   try {
     await reportState("starting");
 
@@ -89,11 +91,11 @@ async function startCapture(
       }>
     ) => {
       const message = event.data;
-    
+
       if (message.type !== "PCM_CHUNK") {
         return;
       }
-    
+
       const chunk: AudioChunk = {
         sequenceNumber: message.sequenceNumber,
         sampleRate: message.sampleRate,
@@ -101,7 +103,7 @@ async function startCapture(
         sampleFormat: message.sampleFormat,
         samples: message.samples
       };
-    
+
       void handleAudioChunk(chunk);
     };
 
@@ -114,11 +116,12 @@ async function startCapture(
     startAudioMonitoring();
   } catch (error) {
     console.error("Failed to capture audio:", error);
-  
+
     captureMode = undefined;
-    processingOnce = false;
+    identificationInProgress = false;
+    lastIdentifiedTrack = undefined;
     stopAudioResources();
-  
+
     await reportState(
       "error",
       error instanceof Error
@@ -193,7 +196,8 @@ function stopAudioResources(): void {
 
 function stopCapture(): void {
   captureMode = undefined;
-  processingOnce = false;
+  identificationInProgress = false;
+  lastIdentifiedTrack = undefined;
 
   stopAudioResources();
   void reportState("idle");
@@ -213,16 +217,30 @@ async function reportState(
 async function identifyChunk(
   chunk: AudioChunk
 ): Promise<TrackIdentification | null> {
-  const result = await chunkConsumer.consume(chunk);
+  return chunkConsumer.consume(chunk);
+}
 
-  if (result !== null) {
-    await chrome.runtime.sendMessage({
-      type: "IDENTIFICATION_RESULT",
-      result
-    } satisfies ExtensionMessage);
+function isSameTrack(
+  current: TrackIdentification,
+  previous: TrackIdentification | undefined
+): boolean {
+  if (!previous) {
+    return false;
   }
 
-  return result;
+  return (
+    current.title === previous.title &&
+    current.artist === previous.artist
+  );
+}
+
+async function publishIdentification(
+  result: TrackIdentification
+): Promise<void> {
+  await chrome.runtime.sendMessage({
+    type: "IDENTIFICATION_RESULT",
+    result
+  } satisfies ExtensionMessage);
 }
 
 async function handleAudioChunk(chunk: AudioChunk): Promise<void> {
@@ -230,29 +248,35 @@ async function handleAudioChunk(chunk: AudioChunk): Promise<void> {
     return;
   }
 
+  // Only allow one identification request at a time.
+  // Additional chunks are deliberately discarded rather than queued.
+  if (identificationInProgress) {
+    return;
+  }
+
+  identificationInProgress = true;
+
   if (captureMode === "once") {
-    // Prevent another chunk being processed while this one completes.
-    if (processingOnce) {
-      return;
-    }
-
-    processingOnce = true;
-
     await reportState("identifying");
 
     // The user may have stopped capture while the state was updating.
     if (captureMode !== "once") {
+      identificationInProgress = false;
       return;
     }
 
     try {
-      await identifyChunk(chunk);
+      const result = await identifyChunk(chunk);
+
+      if (result !== null) {
+        await publishIdentification(result);
+      }
     } catch (error) {
       console.error("Failed to identify audio:", error);
 
       stopAudioResources();
       captureMode = undefined;
-      processingOnce = false;
+      identificationInProgress = false;
 
       await reportState(
         "error",
@@ -267,15 +291,23 @@ async function handleAudioChunk(chunk: AudioChunk): Promise<void> {
     // One complete chunk has been consumed; end this session.
     stopAudioResources();
     captureMode = undefined;
-    processingOnce = false;
+    identificationInProgress = false;
     await reportState("idle");
 
     return;
   }
 
-  // Continuous mode: consume each chunk and keep capturing.
+  // Continuous mode: consume one chunk at a time.
   try {
-    await identifyChunk(chunk);
+    const result = await identifyChunk(chunk);
+
+    if (
+      result !== null &&
+      !isSameTrack(result, lastIdentifiedTrack)
+    ) {
+      lastIdentifiedTrack = result;
+      await publishIdentification(result);
+    }
   } catch (error) {
     console.error("Failed to identify audio:", error);
 
@@ -285,5 +317,7 @@ async function handleAudioChunk(chunk: AudioChunk): Promise<void> {
         ? error.message
         : "Failed to identify audio."
     );
+  } finally {
+    identificationInProgress = false;
   }
 }
