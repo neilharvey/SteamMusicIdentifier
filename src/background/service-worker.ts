@@ -3,9 +3,16 @@ import type {
   ExtensionResponse,
   OffscreenCommand
 } from "../shared/messages";
+import type {
+  TrackIdentification,
+  IdentificationHistoryItem,
+} from "../shared/models";
 
 import { ProviderSettingsStore } from "../settings/provider-settings-store";
 import type { ProviderSettings } from "../shared/provider-settings";
+import { IdentificationHistoryStore } from "../history/identification-history-store";
+
+const historyStore = new IdentificationHistoryStore();
 
 async function ensureOffscreenDocument(): Promise<void> {
   const contexts = await chrome.runtime.getContexts({
@@ -46,9 +53,15 @@ function getMediaStreamId(tabId: number): Promise<string> {
 
 chrome.runtime.onMessage.addListener(
   (
-    message: ExtensionMessage | { type: "GET_PROVIDER_SETTINGS" },
+    message: ExtensionMessage,
     _sender,
-    sendResponse: (response: ExtensionResponse | ProviderSettings | null) => void
+    sendResponse: (
+      response:
+        | ExtensionResponse
+        | ProviderSettings
+        | IdentificationHistoryItem[]
+        | null
+    ) => void
   ): boolean => {
     switch (message.type) {
       case "START_CAPTURE":
@@ -61,6 +74,14 @@ chrome.runtime.onMessage.addListener(
 
       case "GET_PROVIDER_SETTINGS":
         void getProviderSettings(sendResponse);
+        return true;
+
+      case "IDENTIFICATION_RESULT":
+        void handleIdentificationResult(message.result);
+        return false;
+
+      case "GET_IDENTIFICATION_HISTORY":
+        void getIdentificationHistory(sendResponse);
         return true;
 
       default:
@@ -133,4 +154,28 @@ async function getProviderSettings(
     console.error("Failed to retrieve provider settings:", error);
     sendResponse(null);
   }
+}
+
+async function handleIdentificationResult(
+  result: TrackIdentification
+): Promise<void> {
+  try {
+    await historyStore.add(result);
+  } catch (error) {
+    console.error("Failed to save identification history:", error);
+  }
+
+  await chrome.runtime.sendMessage({
+    type: "IDENTIFICATION_RESULT",
+    result
+  } satisfies ExtensionMessage).catch(() => {
+    // The popup may have closed; history has already been saved.
+  });
+}
+
+async function getIdentificationHistory(
+  sendResponse: (response: IdentificationHistoryItem[]) => void
+): Promise<void> {
+  const history = await historyStore.get();
+  sendResponse(history);
 }

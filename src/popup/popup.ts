@@ -2,7 +2,10 @@ import type {
   ExtensionMessage,
   ExtensionResponse
 } from "../shared/messages";
-import type { TrackIdentification } from "../shared/models";
+import type {
+  TrackIdentification,
+  IdentificationHistoryItem
+} from "../shared/models";
 
 const status = document.querySelector<HTMLDivElement>("#status")!;
 const result = document.querySelector<HTMLDivElement>("#result")!;
@@ -32,6 +35,11 @@ meterTrack.append(meterBar);
 meterContainer.append(meterLabel, meterTrack);
 
 status.insertAdjacentElement("afterend", meterContainer);
+
+const history = document.createElement("div");
+history.style.marginTop = "20px";
+
+result.insertAdjacentElement("afterend", history);
 
 function updateAudioLevel(level: number): void {
   const displayLevel = Math.max(0, Math.min(level, 0.25));
@@ -97,6 +105,52 @@ function showResult(track: TrackIdentification): void {
   });
 
   result.append(copyButton);
+}
+
+async function getIdentificationHistory(): Promise<IdentificationHistoryItem[]> {
+  return chrome.runtime.sendMessage({
+    type: "GET_IDENTIFICATION_HISTORY"
+  });
+}
+
+function showHistory(items: IdentificationHistoryItem[]): void {
+  history.innerHTML = "";
+
+  if (items.length === 0) {
+    return;
+  }
+
+  const heading = document.createElement("h3");
+  heading.textContent = "History";
+
+  history.append(heading);
+
+  for (const item of items) {
+    const entry = document.createElement("div");
+    entry.style.marginBottom = "12px";
+
+    const title = document.createElement("strong");
+    title.textContent = item.title;
+
+    const artist = document.createElement("div");
+    artist.textContent = item.artist;
+
+    const date = document.createElement("div");
+    date.textContent = new Date(item.recognisedAt).toLocaleString();
+    date.style.fontSize = "0.85em";
+
+    entry.append(title, artist, date);
+    history.append(entry);
+  }
+}
+
+async function loadHistory(): Promise<void> {
+  try {
+    const items = await getIdentificationHistory();
+    showHistory(items);
+  } catch (error) {
+    console.error("Failed to load identification history:", error);
+  }
 }
 
 document.querySelector("#identify")!.addEventListener("click", async () => {
@@ -181,3 +235,5 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
       break;
   }
 });
+
+void loadHistory();
