@@ -1,0 +1,202 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Song History — Stream Music</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      background: #101116;
+      color: #f5f5f7;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 36px 24px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 32px;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 40px;
+      height: 40px;
+      place-items: center;
+      border-radius: 12px;
+      background: #7770f5;
+      font-size: 23px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 25px;
+      letter-spacing: -0.7px;
+    }
+
+    .subtitle {
+      margin: 6px 0 0;
+      color: #a5a5b3;
+      font-size: 13px;
+    }
+
+    h2 {
+      margin: 28px 0 12px;
+      color: #aaa6ff;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1.1px;
+      text-transform: uppercase;
+    }
+
+    .track-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .track {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      width: 100%;
+      padding: 14px;
+      border: 1px solid #30303b;
+      border-radius: 12px;
+      background: #191920;
+      color: inherit;
+      text-align: left;
+    }
+
+    .track-copy {
+      flex: 1;
+      min-width: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .track-copy:hover .track-title {
+      color: #c1bdff;
+    }
+
+    .track-art {
+      display: grid;
+      width: 46px;
+      height: 46px;
+      flex: 0 0 auto;
+      place-items: center;
+      border-radius: 9px;
+      background: linear-gradient(145deg, #353352, #222230);
+      color: #aaa5ff;
+      font-size: 21px;
+    }
+
+    .track-title {
+      overflow-wrap: anywhere;
+      font-size: 14px;
+      font-weight: 650;
+      line-height: 1.5;
+    }
+
+    .track-artist {
+      margin-top: 2px;
+      color: #c0c0cb;
+      font-size: 12px;
+    }
+
+    .track-meta {
+      margin-top: 5px;
+      color: #858593;
+      font-size: 11px;
+    }
+
+    .track-links {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+    }
+
+    a {
+      color: #c1bdff;
+      font-size: 12px;
+      text-decoration: none;
+    }
+
+    a:hover {
+      color: white;
+      text-decoration: underline;
+    }
+
+    .empty {
+      padding: 28px 20px;
+      border: 1px dashed #3a3947;
+      border-radius: 12px;
+      color: #a5a5b3;
+      font-size: 13px;
+      line-height: 1.6;
+      text-align: center;
+    }
+
+    .message {
+      margin-bottom: 16px;
+      color: #a5a5b3;
+      font-size: 12px;
+    }
+
+    @media (max-width: 480px) {
+      body {
+        padding: 24px 14px;
+      }
+
+      .track {
+        gap: 10px;
+        padding: 11px;
+      }
+
+      .track-links {
+        font-size: 11px;
+      }
+    }
+
+    .mode-switch[hidden],
+    .track-actions[hidden] {
+    display: none;
+    }
+
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand-mark" aria-hidden="true">♪</div>
+    <div>
+      <h1>Song history</h1>
+      <p class="subtitle">Previously recognised tracks</p>
+    </div>
+  </header>
+
+  <p id="message" class="message" role="status" aria-live="polite">
+    Loading history…
+  </p>
+
+  <main id="history-list" aria-label="Recognised tracks"></main>
+
+  <script type="module" src="./history.ts"></script>
+</body>
+</html>

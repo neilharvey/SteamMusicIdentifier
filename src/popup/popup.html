@@ -1,42 +1,374 @@
+
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Stream Music Identifier</title>
-    <style>
-        body {
-            width: 320px;
-            padding: 16px;
-            font: 14px system-ui, sans-serif;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stream Music Identifier</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      background: #101116;
+      color: #f5f5f7;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+    }
 
-        button {
-            width: 100%;
-            padding: 10px;
-            margin: 4px 0;
-            cursor: pointer;
-        }
+    * {
+      box-sizing: border-box;
+    }
 
-        #status {
-            margin: 12px 0;
-        }
+    body {
+      width: 340px;
+      min-height: 420px;
+      margin: 0;
+      padding: 22px 22px 16px;
+      background:
+        radial-gradient(ellipse at 50% 20%, #20213a 0, transparent 55%),
+        #101116;
+    }
 
-        #result {
-            margin-top: 12px;
-        }
-    </style>
+    button, a, select {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    button:focus-visible,
+    a:focus-visible,
+    select:focus-visible {
+      outline: 2px solid #a8a4ff;
+      outline-offset: 4px;
+    }
+
+    .main {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    .orb-area {
+      display: grid;
+      width: 172px;
+      height: 172px;
+      place-items: center;
+      margin: 3px 0 12px;
+    }
+
+    .orb {
+      position: relative;
+      display: grid;
+      width: 112px;
+      height: 112px;
+      place-items: center;
+      border: 1px solid #7770f577;
+      border-radius: 50%;
+      background: linear-gradient(145deg, #302e63, #1b1b35 75%);
+      color: white;
+      box-shadow: 0 0 42px #7770f51c, inset 0 0 25px #7770f51c;
+      transition: background 180ms ease, transform 180ms ease;
+    }
+
+    .orb:hover {
+      transform: scale(1.035);
+      background: linear-gradient(145deg, #403c7b, #222142 75%);
+    }
+
+    .orb:disabled {
+      cursor: wait;
+      opacity: 0.8;
+    }
+
+    .orb svg {
+      width: 33px;
+      height: 33px;
+    }
+
+    .orb-ring {
+      position: absolute;
+      inset: -12px;
+      border: 1px solid #817aff00;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .orb-ring.ring-two {
+      inset: -24px;
+    }
+
+    .is-active .orb-ring {
+      animation: pulse 2.4s ease-out infinite;
+      border-color: #817aff88;
+    }
+
+    .is-active .ring-two {
+      animation-delay: 1.2s;
+    }
+
+    .is-active .orb {
+    background: linear-gradient(145deg, #514baf, #28244e);
+    box-shadow:
+        0 0 var(--audio-glow, 24px) #7770f54d,
+        inset 0 0 24px #a9a4ff22;
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: scale(0.78);
+        opacity: 0;
+      }
+      25% {
+        opacity: 0.8;
+      }
+      100% {
+        transform: scale(1.2);
+        opacity: 0;
+      }
+    }
+
+    .headline {
+      margin: 5px 0 7px;
+      font-size: 21px;
+      font-weight: 650;
+      letter-spacing: -0.7px;
+    }
+
+    .subheading {
+      min-height: 18px;
+      margin: 0;
+      color: #9d9dac;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .mode-switch {
+      display: flex;
+      gap: 3px;
+      width: 100%;
+      margin: 22px 0 0;
+      padding: 4px;
+      border: 1px solid #30303b;
+      border-radius: 12px;
+      background: #191920;
+    }
+
+    .mode-button {
+      flex: 1;
+      padding: 9px 7px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: #a5a5b4;
+      font-size: 12px;
+      transition: background 150ms ease, color 150ms ease;
+    }
+
+    .mode-button[aria-pressed="true"] {
+      background: #343247;
+      color: white;
+      box-shadow: 0 1px 2px #0004;
+    }
+
+    .mode-button:disabled {
+      cursor: default;
+      opacity: 0.6;
+    }
+
+    .track-card {
+      width: 100%;
+      margin-top: 23px;
+      padding: 14px;
+      border: 1px solid #30303b;
+      border-radius: 14px;
+      background: #191920cc;
+      text-align: left;
+    }
+
+    .track-eyebrow {
+      margin-bottom: 11px;
+      color: #a6a2ff;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+    }
+
+    .track-content {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .track-art {
+      display: grid;
+      width: 48px;
+      height: 48px;
+      flex: 0 0 auto;
+      place-items: center;
+      border-radius: 9px;
+      background: linear-gradient(145deg, #353352, #222230);
+      color: #aaa5ff;
+    }
+
+    .track-art svg {
+      width: 23px;
+      height: 23px;
+    }
+
+    .track-info {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .track-title {
+      overflow: hidden;
+      margin: 0 0 4px;
+      font-size: 13px;
+      font-weight: 650;
+      line-height: 1.4;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .track-artist,
+    .track-album {
+      overflow: hidden;
+      color: #a5a5b3;
+      font-size: 11px;
+      line-height: 1.5;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .track-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid #30303b;
+    }
+
+    .text-button {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: #c1bdff;
+      font-size: 11px;
+    }
+
+    .text-button:hover,
+    .footer-link:hover {
+      color: white;
+    }
+
+    .empty-track {
+      color: #858593;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .error-message {
+      display: none;
+      width: 100%;
+      margin-top: 12px;
+      color: #ffaaa8;
+      font-size: 11px;
+      line-height: 1.5;
+      text-align: center;
+      overflow-wrap: anywhere;
+    }
+
+    .error-message:not(:empty) {
+      display: block;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: center;
+      margin-top: 23px;
+      padding-top: 14px;
+      border-top: 1px solid #292933;
+    }
+
+    .footer-link {
+      border: 0;
+      background: transparent;
+      color: #a5a5b3;
+      font-size: 11px;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
 </head>
 
 <body>
-    <h3>Stream Music Identifier</h3>
-    <div id="status">Idle</div>
-    <button id="identify">Identify once</button>
-    <button id="continuous">Start continuous</button>
-    <button id="stop">Stop capture</button>
-    <div id="result"></div>
-    <script type="module" src="./popup.ts"></script>
-</body>
 
+  <main class="main" id="main">
+    <div class="orb-area">
+      <button id="identify" class="orb" type="button"
+              aria-label="Identify music" title="Identify music">
+        <span class="orb-ring" aria-hidden="true"></span>
+        <span class="orb-ring ring-two" aria-hidden="true"></span>
+        <svg id="orb-icon" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M9 18V5l12-2v13"></path>
+          <circle cx="6" cy="18" r="3"></circle>
+          <circle cx="18" cy="16" r="3"></circle>
+        </svg>
+      </button>
+    </div>
+
+    <h1 id="headline" class="headline">Identify music</h1>
+    <p id="subheading" class="subheading">
+      Find out what's playing in your browser.
+    </p>
+
+    <div id="mode-switch" class="mode-switch"
+         role="group" aria-label="Identification mode">
+      <button id="mode-once" class="mode-button" type="button"
+              aria-pressed="true">Identify once</button>
+      <button id="mode-continuous" class="mode-button" type="button"
+              aria-pressed="false">Continuous</button>
+    </div>
+
+    <section id="track-card" class="track-card" aria-label="Recognised track">
+      <div id="track-eyebrow" class="track-eyebrow">Last identified</div>
+      <div id="track-content">
+        <div class="empty-track">
+          Your recognised song will appear here.
+        </div>
+      </div>
+      <div id="track-actions" class="track-actions" hidden>
+        <button id="copy-track" class="text-button" type="button">
+          Copy details
+        </button>
+        <a id="open-track" class="text-button" target="_blank"
+           rel="noopener noreferrer" hidden>Open song</a>
+      </div>
+    </section>
+
+    <div id="error-message" class="error-message" role="alert"></div>
+  </main>
+
+  <footer class="footer">
+    <a id="history-link" class="footer-link" href="#">View history</a>
+  </footer>
+
+  <script type="module" src="./popup.ts"></script>
+</body>
 </html>

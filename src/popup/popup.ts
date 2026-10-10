@@ -1,68 +1,124 @@
+
 import type {
   ExtensionMessage,
   ExtensionResponse
 } from "../shared/messages";
+
 import type {
   TrackIdentification,
-  IdentificationHistoryItem
+  IdentificationHistoryItem,
+  CaptureMode,
+  CaptureState,
+  CaptureStatus
 } from "../shared/models";
 
-const status = document.querySelector<HTMLDivElement>("#status")!;
-const result = document.querySelector<HTMLDivElement>("#result")!;
+const main = document.querySelector<HTMLElement>("#main")!;
+const identifyButton = document.querySelector<HTMLButtonElement>("#identify")!;
+const orbIcon = document.querySelector<SVGElement>("#orb-icon")!;
+const headline = document.querySelector<HTMLHeadingElement>("#headline")!;
+const subheading = document.querySelector<HTMLParagraphElement>("#subheading")!;
+const modeSwitch = document.querySelector<HTMLDivElement>("#mode-switch")!;
+const onceButton = document.querySelector<HTMLButtonElement>("#mode-once")!;
+const continuousButton =
+  document.querySelector<HTMLButtonElement>("#mode-continuous")!;
+const errorMessage =
+  document.querySelector<HTMLDivElement>("#error-message")!;
 
-// Create the audio meter.
-const meterContainer = document.createElement("div");
-meterContainer.style.marginTop = "12px";
+const trackEyebrow =
+  document.querySelector<HTMLDivElement>("#track-eyebrow")!;
+const trackContent =
+  document.querySelector<HTMLDivElement>("#track-content")!;
+const trackActions =
+  document.querySelector<HTMLDivElement>("#track-actions")!;
+const copyButton =
+  document.querySelector<HTMLButtonElement>("#copy-track")!;
+const openTrackLink =
+  document.querySelector<HTMLAnchorElement>("#open-track")!;
+const historyLink =
+  document.querySelector<HTMLAnchorElement>("#history-link")!;
 
-const meterLabel = document.createElement("div");
-meterLabel.textContent = "Audio level: 0.0000";
-meterLabel.style.marginBottom = "4px";
-
-const meterTrack = document.createElement("div");
-meterTrack.style.width = "100%";
-meterTrack.style.height = "12px";
-meterTrack.style.backgroundColor = "#ddd";
-meterTrack.style.borderRadius = "6px";
-meterTrack.style.overflow = "hidden";
-
-const meterBar = document.createElement("div");
-meterBar.style.width = "0%";
-meterBar.style.height = "100%";
-meterBar.style.backgroundColor = "#238636";
-meterBar.style.transition = "width 0.2s ease";
-
-meterTrack.append(meterBar);
-meterContainer.append(meterLabel, meterTrack);
-
-status.insertAdjacentElement("afterend", meterContainer);
-
-// Create the history section.
-const history = document.createElement("div");
-history.style.marginTop = "20px";
-
-const historyHeading = document.createElement("h3");
-historyHeading.textContent = "History";
-historyHeading.style.marginBottom = "8px";
-
-const historyList = document.createElement("div");
-historyList.style.maxHeight = "240px";
-historyList.style.overflowY = "auto";
-
-history.append(historyHeading, historyList);
-
-result.insertAdjacentElement("afterend", history);
-
+let selectedMode: CaptureMode = "once";
+let captureState: CaptureState = "idle";
+let currentTrack: TrackIdentification | null = null;
 let identificationHistory: IdentificationHistoryItem[] = [];
 
-function updateAudioLevel(level: number): void {
-  const displayLevel = Math.max(0, Math.min(level, 0.25));
-  const percentage = (displayLevel / 0.25) * 100;
+const idleIcon = orbIcon.innerHTML;
 
-  meterBar.style.width = `${percentage}%`;
-  meterLabel.textContent = `Audio level: ${level.toFixed(4)}`;
+const stopIcon = `
+  <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+`;
+
+function isActive(): boolean {
+  return (
+    captureState === "starting" ||
+    captureState === "capturing" ||
+    captureState === "identifying"
+  );
 }
 
-async function send(message: ExtensionMessage): Promise<ExtensionResponse> {
+function setCaptureState(
+  state: CaptureState,
+  error?: string
+): void {
+  captureState = state;
+  
+  main.classList.toggle("is-active", isActive());
+
+  identifyButton.setAttribute(
+    "aria-label",
+    isActive() ? "Stop identification" : "Identify music"
+  );
+  identifyButton.title = isActive()
+    ? "Stop identification"
+    : "Identify music";
+
+  orbIcon.innerHTML = isActive() ? stopIcon : idleIcon;
+
+  onceButton.disabled = isActive();
+  continuousButton.disabled = isActive();
+  modeSwitch.hidden = isActive();
+
+  errorMessage.textContent = error ?? "";
+
+  switch (state) {
+    case "idle":
+      headline.textContent = "Identify music";
+      subheading.textContent =
+        "Find out what's playing in your browser.";
+      break;
+
+    case "starting":
+      headline.textContent = "Getting ready";
+      subheading.textContent = "Connecting to your browser audio…";
+      break;
+
+    case "capturing":
+      headline.textContent = "Listening…";
+      subheading.textContent = "Listening for music in this tab.";
+      break;
+
+    case "identifying":
+      headline.textContent = "Identifying…";
+      subheading.textContent = "Checking the audio for a match.";
+      break;
+
+    case "error":
+      headline.textContent = "Couldn't identify music";
+      subheading.textContent = "Check the message below and try again.";
+      break;
+  }
+}
+
+function updateAudioLevel(level: number): void {
+  const intensity = Math.max(0, Math.min(level, 0.25)) / 0.25;
+  const glow = 24 + intensity * 18;
+
+  main.style.setProperty("--audio-glow", `${glow}px`);
+}
+
+async function send(
+  message: ExtensionMessage
+): Promise<ExtensionResponse> {
   return chrome.runtime.sendMessage(message);
 }
 
@@ -83,131 +139,160 @@ async function activeTabId(): Promise<number> {
 
 async function copyTrack(track: TrackIdentification): Promise<void> {
   const text = `${track.title}\n${track.artist}`;
-
   await navigator.clipboard.writeText(text);
 }
 
-function showResult(track: TrackIdentification): void {
-  result.innerHTML = "";
+function showResult(
+  track: TrackIdentification,
+  label = "Last identified"
+): void {
+  currentTrack = track;
 
-  const title = document.createElement("strong");
+  trackEyebrow.textContent = label;
+  trackContent.replaceChildren();
+
+  const content = document.createElement("div");
+  content.className = "track-content";
+
+  const artwork = document.createElement("div");
+  artwork.className = "track-art";
+  artwork.setAttribute("aria-hidden", "true");
+  artwork.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" stroke-width="1.6"
+      stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 18V5l12-2v13"></path>
+      <circle cx="6" cy="18" r="3"></circle>
+      <circle cx="18" cy="16" r="3"></circle>
+    </svg>
+  `;
+
+  const info = document.createElement("div");
+  info.className = "track-info";
+
+  const title = document.createElement("div");
+  title.className = "track-title";
   title.textContent = track.title;
+  title.title = track.title;
 
   const artist = document.createElement("div");
+  artist.className = "track-artist";
   artist.textContent = track.artist;
+  artist.title = track.artist;
 
-  result.append(title, artist);
+  info.append(title, artist);
 
   if (track.album) {
     const album = document.createElement("div");
+    album.className = "track-album";
     album.textContent = track.album;
-    result.append(album);
+    album.title = track.album;
+    info.append(album);
   }
 
-  const copyButton = document.createElement("button");
-  copyButton.textContent = "Copy song details";
+  content.append(artwork, info);
+  trackContent.append(content);
+  trackActions.hidden = false;
 
-  copyButton.addEventListener("click", async () => {
-    try {
-      await copyTrack(track);
-      copyButton.textContent = "Copied!";
+  openTrackLink.hidden = !track.songLink;
 
-      window.setTimeout(() => {
-        copyButton.textContent = "Copy song details";
-      }, 1500);
-    } catch (error) {
-      console.error("Failed to copy song details:", error);
-      copyButton.textContent = "Copy failed";
+  if (track.songLink) {
+    openTrackLink.href = track.songLink;
+  } else {
+    openTrackLink.removeAttribute("href");
+  }
 
-      window.setTimeout(() => {
-        copyButton.textContent = "Copy song details";
-      }, 1500);
-    }
-  });
-
-  result.append(copyButton);
+  copyButton.textContent = "Copy details";
 }
 
-async function copyHistoryItem(
-  item: IdentificationHistoryItem,
-  button: HTMLButtonElement
-): Promise<void> {
+function showEmptyTrack(): void {
+  currentTrack = null;
+  trackEyebrow.textContent = "Last identified";
+
+  const empty = document.createElement("div");
+  empty.className = "empty-track";
+  empty.textContent = "Your recognised song will appear here.";
+
+  trackContent.replaceChildren(empty);
+  trackActions.hidden = true;
+  openTrackLink.hidden = true;
+}
+
+async function startIdentification(): Promise<void> {
   try {
-    await copyTrack(item);
+    errorMessage.textContent = "";
+    setCaptureState("starting");
 
-    const feedback = document.createElement("span");
-    feedback.textContent = "Copied!";
-    feedback.style.display = "block";
-    feedback.style.fontSize = "0.8em";
-    feedback.style.marginTop = "2px";
+    const tabId = await activeTabId();
 
-    button.append(feedback);
-
-    window.setTimeout(() => {
-      feedback.remove();
-    }, 1500);
-  } catch (error) {
-    console.error("Failed to copy history item:", error);
-
-    const feedback = document.createElement("span");
-    feedback.textContent = "Copy failed";
-    feedback.style.display = "block";
-    feedback.style.fontSize = "0.8em";
-    feedback.style.marginTop = "2px";
-
-    button.append(feedback);
-
-    window.setTimeout(() => {
-      feedback.remove();
-    }, 1500);
-  }
-}
-
-function renderHistory(): void {
-  historyList.innerHTML = "";
-
-  if (identificationHistory.length === 0) {
-    history.style.display = "none";
-    return;
-  }
-
-  history.style.display = "";
-
-  for (const item of identificationHistory) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.style.display = "block";
-    button.style.width = "100%";
-    button.style.textAlign = "left";
-    button.style.padding = "8px";
-    button.style.marginBottom = "4px";
-    button.style.border = "1px solid #ddd";
-    button.style.borderRadius = "4px";
-    button.style.backgroundColor = "#f8f8f8";
-    button.style.cursor = "pointer";
-
-    const title = document.createElement("strong");
-    title.textContent = item.title;
-
-    const artist = document.createElement("div");
-    artist.textContent = item.artist;
-
-    const date = document.createElement("div");
-    date.textContent = new Date(item.recognisedAt).toLocaleString();
-    date.style.fontSize = "0.8em";
-    date.style.marginTop = "2px";
-
-    button.append(title, artist, date);
-
-    button.addEventListener("click", () => {
-      void copyHistoryItem(item, button);
+    const response = await send({
+      type: "START_CAPTURE",
+      tabId,
+      mode: selectedMode
     });
 
-    historyList.append(button);
+    if (!response.success) {
+      setCaptureState(
+        "error",
+        response.error ?? "Failed to start identification."
+      );
+    }
+  } catch (error) {
+    console.error("Failed to start identification:", error);
+
+    setCaptureState(
+      "error",
+      error instanceof Error
+        ? error.message
+        : "Failed to start identification."
+    );
   }
 }
 
-async function getIdentificationHistory(): Promise<IdentificationHistoryItem[]> {
+async function stopIdentification(): Promise<void> {
+  try {
+    errorMessage.textContent = "";
+
+    const response = await send({
+      type: "STOP_CAPTURE"
+    });
+
+    if (!response.success) {
+      setCaptureState(
+        "error",
+        response.error ?? "Failed to stop identification."
+      );
+      return;
+    }
+
+    setCaptureState("idle");
+  } catch (error) {
+    console.error("Failed to stop identification:", error);
+
+    setCaptureState(
+      "error",
+      error instanceof Error
+        ? error.message
+        : "Failed to stop identification."
+    );
+  }
+}
+
+function selectMode(mode: CaptureMode): void {
+  selectedMode = mode;
+
+  onceButton.setAttribute(
+    "aria-pressed",
+    String(mode === "once")
+  );
+  continuousButton.setAttribute(
+    "aria-pressed",
+    String(mode === "continuous")
+  );
+}
+
+async function getIdentificationHistory():
+  Promise<IdentificationHistoryItem[]> {
   return chrome.runtime.sendMessage({
     type: "GET_IDENTIFICATION_HISTORY"
   });
@@ -216,87 +301,87 @@ async function getIdentificationHistory(): Promise<IdentificationHistoryItem[]> 
 async function loadHistory(): Promise<void> {
   try {
     identificationHistory = await getIdentificationHistory();
-    renderHistory();
+
+    const mostRecent = identificationHistory[0];
+
+    if (mostRecent && !currentTrack) {
+      showResult(mostRecent, "Last identified");
+    }
   } catch (error) {
     console.error("Failed to load identification history:", error);
   }
 }
 
-document.querySelector("#identify")!.addEventListener("click", async () => {
+async function restoreCaptureState(): Promise<void> {
   try {
-    const tabId = await activeTabId();
+    const status = await chrome.runtime.sendMessage({
+      type: "GET_CAPTURE_STATE"
+    }) as CaptureStatus;
 
-    status.textContent = "Starting...";
-
-    const response = await send({
-      type: "START_CAPTURE",
-      tabId,
-      mode: "once"
-    });
-
-    if (!response.success) {
-      status.textContent = response.error ?? "Failed to start capture.";
+    if (!status) {
+      return;
     }
+
+    if (status.mode) {
+      selectMode(status.mode);
+    }
+
+    setCaptureState(status.state, status.error);
   } catch (error) {
-    console.error("Failed to start identification:", error);
-    status.textContent =
-      error instanceof Error
-        ? error.message
-        : "Failed to start identification.";
+    console.error("Failed to restore capture state:", error);
+  }
+}
+
+identifyButton.addEventListener("click", () => {
+  if (isActive()) {
+    void stopIdentification();
+  } else {
+    void startIdentification();
   }
 });
 
-document.querySelector("#continuous")!.addEventListener("click", async () => {
+onceButton.addEventListener("click", () => {
+  selectMode("once");
+});
+
+continuousButton.addEventListener("click", () => {
+  selectMode("continuous");
+});
+
+copyButton.addEventListener("click", async () => {
+  if (!currentTrack) {
+    return;
+  }
+
   try {
-    const tabId = await activeTabId();
+    await copyTrack(currentTrack);
+    copyButton.textContent = "Copied";
 
-    status.textContent = "Starting...";
-
-    const response = await send({
-      type: "START_CAPTURE",
-      tabId,
-      mode: "continuous"
-    });
-
-    if (!response.success) {
-      status.textContent = response.error ?? "Failed to start capture.";
-    }
+    window.setTimeout(() => {
+      copyButton.textContent = "Copy details";
+    }, 1500);
   } catch (error) {
-    console.error("Failed to start continuous identification:", error);
-    status.textContent =
-      error instanceof Error
-        ? error.message
-        : "Failed to start continuous identification.";
+    console.error("Failed to copy track details:", error);
+    copyButton.textContent = "Copy failed";
+
+    window.setTimeout(() => {
+      copyButton.textContent = "Copy details";
+    }, 1500);
   }
 });
 
-document.querySelector("#stop")!.addEventListener("click", async () => {
-  try {
-    const response = await send({
-      type: "STOP_CAPTURE"
-    });
+historyLink.addEventListener("click", (event) => {
+  event.preventDefault();
 
-    if (!response.success) {
-      status.textContent = response.error ?? "Failed to stop capture.";
-    }
-  } catch (error) {
-    console.error("Failed to stop capture:", error);
-    status.textContent =
-      error instanceof Error
-        ? error.message
-        : "Failed to stop capture.";
-  }
+  void chrome.tabs.create({
+    url: chrome.runtime.getURL("history/history.html")
+  });
 });
 
 chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
   switch (message.type) {
     case "CAPTURE_STATE":
-      status.textContent = message.error ?? message.state;
-
-      if (message.state === "idle") {
-        updateAudioLevel(0);
-      }
-
+      setCaptureState(message.state, message.error);
       break;
 
     case "AUDIO_LEVEL":
@@ -304,7 +389,7 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
       break;
 
     case "IDENTIFICATION_RESULT": {
-      showResult(message.result);
+      showResult(message.result, "Just identified");
 
       const historyItem: IdentificationHistoryItem = {
         ...message.result,
@@ -316,10 +401,13 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
         ...identificationHistory
       ].slice(0, 50);
 
-      renderHistory();
       break;
     }
   }
 });
 
+selectMode("once");
+showEmptyTrack();
+
+void restoreCaptureState();
 void loadHistory();

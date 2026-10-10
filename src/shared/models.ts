@@ -42,3 +42,9 @@ export interface AudioChunk {
   /** Mono audio samples, normalized to the range -1.0 to 1.0. */
   samples: Float32Array;
 }
+
+export interface CaptureStatus {
+  state: CaptureState;
+  mode?: CaptureMode;
+  error?: string;
+}

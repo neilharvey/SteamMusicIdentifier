@@ -1,10 +1,21 @@
+
 import type {
   CaptureMode,
   CaptureState,
-  TrackIdentification
+  TrackIdentification,
 } from "./models";
 
-/** Messages sent from the popup to the service worker. */
+export interface ExtensionResponse {
+  success: boolean;
+  error?: string;
+}
+
+export interface CaptureStatus {
+  state: CaptureState;
+  mode?: CaptureMode;
+  error?: string;
+}
+
 export type PopupMessage =
   | {
       type: "START_CAPTURE";
@@ -13,6 +24,9 @@ export type PopupMessage =
     }
   | {
       type: "STOP_CAPTURE";
+    }
+  | {
+      type: "GET_CAPTURE_STATE";
     };
 
 export type SettingsMessage = {
@@ -27,7 +41,6 @@ export type HistoryMessage =
       type: "CLEAR_IDENTIFICATION_HISTORY";
     };
 
-/** Messages sent from the service worker to the offscreen document. */
 export type OffscreenCommand =
   | {
       type: "CAPTURE_STARTED";
@@ -36,9 +49,11 @@ export type OffscreenCommand =
     }
   | {
       type: "OFFSCREEN_STOP";
+    }
+  | {
+      type: "GET_OFFSCREEN_CAPTURE_STATE";
     };
 
-/** Messages sent from the offscreen document to other extension contexts. */
 export type OffscreenEvent =
   | {
       type: "CAPTURE_STATE";
@@ -54,16 +69,9 @@ export type OffscreenEvent =
       result: TrackIdentification;
     };
 
-/** All extension messages. */
 export type ExtensionMessage =
   | PopupMessage
   | SettingsMessage
   | HistoryMessage
   | OffscreenCommand
   | OffscreenEvent;
-
-/** Standard response for popup requests. */
-export interface ExtensionResponse {
-  success: boolean;
-  error?: string;
-}

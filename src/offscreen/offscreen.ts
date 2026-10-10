@@ -1,17 +1,21 @@
+
 import type {
   CaptureMode,
   CaptureState,
   AudioChunk,
   TrackIdentification
 } from "../shared/models";
+
 import type {
   ExtensionMessage
 } from "../shared/messages";
+
 import { AudioChunkConsumer } from "./audio-chunk-consumer";
 import { ProviderSettingsClient } from "../settings/provider-settings-client";
 import { AuddMusicIdentificationService } from "../providers/audd/audd-music-identification-service";
 
 const settingsClient = new ProviderSettingsClient();
+
 const identificationService =
   new AuddMusicIdentificationService(settingsClient);
 
@@ -24,21 +28,35 @@ let source: MediaStreamAudioSourceNode | undefined;
 let analyser: AnalyserNode | undefined;
 let workletNode: AudioWorkletNode | undefined;
 let monitorTimer: number | undefined;
+
 let captureMode: CaptureMode | undefined;
+let captureState: CaptureState = "idle";
+let captureError: string | undefined;
+
 let identificationInProgress = false;
 let lastIdentifiedTrack: TrackIdentification | undefined;
 
-chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
-  switch (message.type) {
-    case "CAPTURE_STARTED":
-      void startCapture(message.streamId, message.mode);
-      break;
+chrome.runtime.onMessage.addListener(
+  (message: ExtensionMessage, _sender, sendResponse) => {
+    switch (message.type) {
+      case "CAPTURE_STARTED":
+        void startCapture(message.streamId, message.mode);
+        break;
 
-    case "OFFSCREEN_STOP":
-      stopCapture();
-      break;
+      case "OFFSCREEN_STOP":
+        stopCapture();
+        break;
+
+      case "GET_OFFSCREEN_CAPTURE_STATE":
+        sendResponse({
+          state: captureState,
+          mode: captureMode,
+          error: captureError
+        });
+        break;
+    }
   }
-});
+);
 
 async function startCapture(
   streamId: string,
@@ -120,6 +138,7 @@ async function startCapture(
     captureMode = undefined;
     identificationInProgress = false;
     lastIdentifiedTrack = undefined;
+
     stopAudioResources();
 
     await reportState(
@@ -200,6 +219,7 @@ function stopCapture(): void {
   lastIdentifiedTrack = undefined;
 
   stopAudioResources();
+
   void reportState("idle");
 }
 
@@ -207,6 +227,9 @@ async function reportState(
   state: CaptureState,
   error?: string
 ): Promise<void> {
+  captureState = state;
+  captureError = error;
+
   await chrome.runtime.sendMessage({
     type: "CAPTURE_STATE",
     state,
@@ -292,6 +315,7 @@ async function handleAudioChunk(chunk: AudioChunk): Promise<void> {
     stopAudioResources();
     captureMode = undefined;
     identificationInProgress = false;
+
     await reportState("idle");
 
     return;

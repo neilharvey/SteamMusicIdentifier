@@ -11,24 +11,28 @@ export default defineConfig({
     emptyOutDir: true,
 
     rollupOptions: {
-      input: {
-        "background/service-worker": resolve(
-          __dirname,
-          "src/background/service-worker.ts"
-        ),
-        "offscreen/offscreen": resolve(
-          __dirname,
-          "src/offscreen/offscreen.html"
-        ),
-        "popup/popup": resolve(
-          __dirname,
-          "src/popup/popup.html"
-        ),
-        "options/options": resolve(
-          __dirname,
-          "src/options/options.html"
-        )
-      },
+        input: {
+          "background/service-worker": resolve(
+            __dirname,
+            "src/background/service-worker.ts"
+          ),
+          "offscreen/offscreen": resolve(
+            __dirname,
+            "src/offscreen/offscreen.html"
+          ),
+          "popup/popup": resolve(
+            __dirname,
+            "src/popup/popup.html"
+          ),
+          "history/history": resolve(
+            __dirname,
+            "src/history/history.html"
+          ),
+          "options/options": resolve(
+            __dirname,
+            "src/options/options.html"
+          )
+        },
 
       output: {
         entryFileNames: "[name].js",

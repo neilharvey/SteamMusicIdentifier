@@ -1,11 +1,14 @@
+
 import type {
   ExtensionMessage,
   ExtensionResponse,
-  OffscreenCommand
+  OffscreenCommand,
+  CaptureStatus
 } from "../shared/messages";
+
 import type {
   TrackIdentification,
-  IdentificationHistoryItem,
+  IdentificationHistoryItem
 } from "../shared/models";
 
 import { ProviderSettingsStore } from "../settings/provider-settings-store";
@@ -60,6 +63,7 @@ chrome.runtime.onMessage.addListener(
         | ExtensionResponse
         | ProviderSettings
         | IdentificationHistoryItem[]
+        | CaptureStatus
         | null
     ) => void
   ): boolean => {
@@ -70,6 +74,10 @@ chrome.runtime.onMessage.addListener(
 
       case "STOP_CAPTURE":
         void stopCapture(sendResponse);
+        return true;
+
+      case "GET_CAPTURE_STATE":
+        void getCaptureState(sendResponse);
         return true;
 
       case "GET_PROVIDER_SETTINGS":
@@ -139,6 +147,30 @@ async function stopCapture(
         ? error.message
         : "Failed to stop audio capture."
     });
+  }
+}
+
+async function getCaptureState(
+  sendResponse: (response: CaptureStatus) => void
+): Promise<void> {
+  try {
+    const contexts = await chrome.runtime.getContexts({
+      contextTypes: ["OFFSCREEN_DOCUMENT"]
+    });
+
+    if (contexts.length === 0) {
+      sendResponse({ state: "idle" });
+      return;
+    }
+
+    const status = await chrome.runtime.sendMessage({
+      type: "GET_OFFSCREEN_CAPTURE_STATE"
+    } satisfies OffscreenCommand) as CaptureStatus | undefined;
+
+    sendResponse(status ?? { state: "idle" });
+  } catch (error) {
+    console.error("Failed to retrieve capture state:", error);
+    sendResponse({ state: "idle" });
   }
 }
 
