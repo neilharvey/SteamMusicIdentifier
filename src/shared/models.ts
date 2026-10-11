@@ -47,4 +47,5 @@ export interface CaptureStatus {
   state: CaptureState;
   mode?: CaptureMode;
   error?: string;
+  info?: string;
 }

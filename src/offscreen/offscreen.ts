@@ -2,6 +2,7 @@
 import type {
   CaptureMode,
   CaptureState,
+  CaptureStatus,
   AudioChunk,
   TrackIdentification
 } from "../shared/models";
@@ -15,6 +16,10 @@ import { ProviderSettingsClient } from "../settings/provider-settings-client";
 import { AuddMusicIdentificationService } from "../providers/audd/audd-music-identification-service";
 
 const IDENTIFICATION_INTERVAL_MS = 20_000;
+const MINIMUM_AUDIO_RMS = 0.005;
+
+const NO_AUDIO_MESSAGE =
+  "No audio detected. Start playback to identify a track.";
 
 const settingsClient = new ProviderSettingsClient();
 
@@ -34,6 +39,7 @@ let monitorTimer: number | undefined;
 let captureMode: CaptureMode | undefined;
 let captureState: CaptureState = "idle";
 let captureError: string | undefined;
+let captureInfo: string | undefined;
 
 let identificationInProgress = false;
 let lastIdentifiedTrack: TrackIdentification | undefined;
@@ -50,13 +56,17 @@ chrome.runtime.onMessage.addListener(
         stopCapture();
         break;
 
-      case "GET_OFFSCREEN_CAPTURE_STATE":
-        sendResponse({
+      case "GET_OFFSCREEN_CAPTURE_STATE": {
+        const status: CaptureStatus = {
           state: captureState,
           mode: captureMode,
-          error: captureError
-        });
+          error: captureError,
+          info: captureInfo
+        };
+
+        sendResponse(status);
         break;
+      }
     }
   }
 );
@@ -69,6 +79,8 @@ async function startCapture(
   identificationInProgress = false;
   lastIdentifiedTrack = undefined;
   lastIdentificationAttemptAt = 0;
+  captureError = undefined;
+  captureInfo = undefined;
 
   try {
     await reportState("starting");
@@ -93,6 +105,7 @@ async function startCapture(
     });
 
     source = audioContext.createMediaStreamSource(mediaStream);
+
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 2048;
 
@@ -130,10 +143,11 @@ async function startCapture(
 
     source.connect(analyser);
     source.connect(workletNode);
+
+    // Keep the captured tab audio audible.
     workletNode.connect(audioContext.destination);
 
     await reportState("capturing");
-
     startAudioMonitoring();
   } catch (error) {
     console.error("Failed to capture audio:", error);
@@ -222,6 +236,7 @@ function stopCapture(): void {
   identificationInProgress = false;
   lastIdentifiedTrack = undefined;
   lastIdentificationAttemptAt = 0;
+  captureInfo = undefined;
 
   stopAudioResources();
 
@@ -230,16 +245,35 @@ function stopCapture(): void {
 
 async function reportState(
   state: CaptureState,
-  error?: string
+  error?: string,
+  info?: string
 ): Promise<void> {
   captureState = state;
   captureError = error;
+  captureInfo = info;
 
   await chrome.runtime.sendMessage({
     type: "CAPTURE_STATE",
     state,
-    error
+    error,
+    info
   } satisfies ExtensionMessage);
+}
+
+function hasAudio(chunk: AudioChunk): boolean {
+  if (chunk.samples.length === 0) {
+    return false;
+  }
+
+  let sum = 0;
+
+  for (const sample of chunk.samples) {
+    sum += sample * sample;
+  }
+
+  const rms = Math.sqrt(sum / chunk.samples.length);
+
+  return rms >= MINIMUM_AUDIO_RMS;
 }
 
 async function identifyChunk(
@@ -276,13 +310,51 @@ async function handleAudioChunk(chunk: AudioChunk): Promise<void> {
     return;
   }
 
-  // Only allow one identification request at a time.
-  // Additional chunks are deliberately discarded rather than queued.
+  // Only process one chunk at a time. Do not queue stale chunks.
   if (identificationInProgress) {
     return;
   }
 
-  // In continuous mode, skip chunks until the next lookup is due.
+  // Check for silence before any identification request.
+  if (!hasAudio(chunk)) {
+    if (captureMode === "once") {
+      // A one-shot attempt has no reason to keep capturing silence.
+      stopAudioResources();
+      captureMode = undefined;
+      identificationInProgress = false;
+
+      await reportState(
+        "idle",
+        undefined,
+        NO_AUDIO_MESSAGE
+      );
+
+      return;
+    }
+
+    // Continuous mode stays active and waits for audio to resume.
+    // Only send a state update when the informational status changes.
+    if (
+      captureState !== "capturing" ||
+      captureInfo !== NO_AUDIO_MESSAGE ||
+      captureError !== undefined
+    ) {
+      await reportState(
+        "capturing",
+        undefined,
+        NO_AUDIO_MESSAGE
+      );
+    }
+
+    return;
+  }
+
+  // Audio has resumed. Clear the no-audio message.
+  if (captureInfo !== undefined) {
+    await reportState("capturing");
+  }
+
+  // In continuous mode, only identify at the configured interval.
   if (
     captureMode === "continuous" &&
     Date.now() - lastIdentificationAttemptAt <

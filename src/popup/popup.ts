@@ -56,12 +56,14 @@ function isActive(): boolean {
   );
 }
 
+
 function setCaptureState(
   state: CaptureState,
-  error?: string
+  error?: string,
+  info?: string
 ): void {
   captureState = state;
-  
+
   main.classList.toggle("is-active", isActive());
 
   identifyButton.setAttribute(
@@ -73,28 +75,32 @@ function setCaptureState(
     : "Identify music";
 
   orbIcon.innerHTML = isActive() ? stopIcon : idleIcon;
-
   onceButton.disabled = isActive();
   continuousButton.disabled = isActive();
   modeSwitch.hidden = isActive();
 
+  // Only genuine errors appear in the error block.
   errorMessage.textContent = error ?? "";
 
   switch (state) {
     case "idle":
       headline.textContent = "Identify music";
       subheading.textContent =
-        "Find out what's playing in your browser.";
+        info ?? "Find out what's playing in your browser.";
       break;
 
     case "starting":
       headline.textContent = "Getting ready";
-      subheading.textContent = "Connecting to your browser audio…";
+      subheading.textContent =
+        "Connecting to your browser audio…";
       break;
 
     case "capturing":
-      headline.textContent = "Listening…";
-      subheading.textContent = "Listening for music in this tab.";
+      headline.textContent = info
+        ? "Listening for music"
+        : "Listening…";
+      subheading.textContent =
+        info ?? "Listening for music in this tab.";
       break;
 
     case "identifying":
@@ -104,7 +110,8 @@ function setCaptureState(
 
     case "error":
       headline.textContent = "Couldn't identify music";
-      subheading.textContent = "Check the message below and try again.";
+      subheading.textContent =
+        "Check the message below and try again.";
       break;
   }
 }
@@ -326,7 +333,7 @@ async function restoreCaptureState(): Promise<void> {
       selectMode(status.mode);
     }
 
-    setCaptureState(status.state, status.error);
+    setCaptureState(status.state, status.error, status.info);
   } catch (error) {
     console.error("Failed to restore capture state:", error);
   }
@@ -381,7 +388,7 @@ historyLink.addEventListener("click", (event) => {
 chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
   switch (message.type) {
     case "CAPTURE_STATE":
-      setCaptureState(message.state, message.error);
+      setCaptureState(message.state, message.error, message.info);
       break;
 
     case "AUDIO_LEVEL":

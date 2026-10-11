@@ -53,6 +53,7 @@ export type OffscreenEvent =
       type: "CAPTURE_STATE";
       state: CaptureState;
       error?: string;
+      info?: string;
     }
   | {
       type: "AUDIO_LEVEL";
