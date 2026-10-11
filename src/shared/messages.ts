@@ -10,12 +10,6 @@ export interface ExtensionResponse {
   error?: string;
 }
 
-export interface CaptureStatus {
-  state: CaptureState;
-  mode?: CaptureMode;
-  error?: string;
-}
-
 export type PopupMessage =
   | {
       type: "START_CAPTURE";

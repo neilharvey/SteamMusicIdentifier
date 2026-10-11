@@ -2,13 +2,13 @@
 import type {
   ExtensionMessage,
   ExtensionResponse,
-  OffscreenCommand,
-  CaptureStatus
+  OffscreenCommand
 } from "../shared/messages";
 
 import type {
   TrackIdentification,
-  IdentificationHistoryItem
+  IdentificationHistoryItem,
+  CaptureStatus
 } from "../shared/models";
 
 import { ProviderSettingsStore } from "../settings/provider-settings-store";
