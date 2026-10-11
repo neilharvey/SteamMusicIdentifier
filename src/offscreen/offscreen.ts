@@ -14,6 +14,8 @@ import { AudioChunkConsumer } from "./audio-chunk-consumer";
 import { ProviderSettingsClient } from "../settings/provider-settings-client";
 import { AuddMusicIdentificationService } from "../providers/audd/audd-music-identification-service";
 
+const IDENTIFICATION_INTERVAL_MS = 20_000;
+
 const settingsClient = new ProviderSettingsClient();
 
 const identificationService =
@@ -35,6 +37,7 @@ let captureError: string | undefined;
 
 let identificationInProgress = false;
 let lastIdentifiedTrack: TrackIdentification | undefined;
+let lastIdentificationAttemptAt = 0;
 
 chrome.runtime.onMessage.addListener(
   (message: ExtensionMessage, _sender, sendResponse) => {
@@ -65,6 +68,7 @@ async function startCapture(
   captureMode = mode;
   identificationInProgress = false;
   lastIdentifiedTrack = undefined;
+  lastIdentificationAttemptAt = 0;
 
   try {
     await reportState("starting");
@@ -89,7 +93,6 @@ async function startCapture(
     });
 
     source = audioContext.createMediaStreamSource(mediaStream);
-
     analyser = audioContext.createAnalyser();
     analyser.fftSize = 2048;
 
@@ -138,6 +141,7 @@ async function startCapture(
     captureMode = undefined;
     identificationInProgress = false;
     lastIdentifiedTrack = undefined;
+    lastIdentificationAttemptAt = 0;
 
     stopAudioResources();
 
@@ -217,6 +221,7 @@ function stopCapture(): void {
   captureMode = undefined;
   identificationInProgress = false;
   lastIdentifiedTrack = undefined;
+  lastIdentificationAttemptAt = 0;
 
   stopAudioResources();
 
@@ -277,7 +282,20 @@ async function handleAudioChunk(chunk: AudioChunk): Promise<void> {
     return;
   }
 
+  // In continuous mode, skip chunks until the next lookup is due.
+  if (
+    captureMode === "continuous" &&
+    Date.now() - lastIdentificationAttemptAt <
+      IDENTIFICATION_INTERVAL_MS
+  ) {
+    return;
+  }
+
   identificationInProgress = true;
+
+  if (captureMode === "continuous") {
+    lastIdentificationAttemptAt = Date.now();
+  }
 
   if (captureMode === "once") {
     await reportState("identifying");
@@ -321,7 +339,7 @@ async function handleAudioChunk(chunk: AudioChunk): Promise<void> {
     return;
   }
 
-  // Continuous mode: consume one chunk at a time.
+  // Continuous mode: identify only when the interval has elapsed.
   try {
     const result = await identifyChunk(chunk);
 
