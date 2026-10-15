@@ -4,18 +4,6 @@ A Chrome extension for identifying music playing in browser-based streams, such 
 
 The extension captures audio from the active browser tab, processes it into audio chunks and sends it directly to [AudD](https://audd.io/) for music identification. It supports both single-shot identification and continuous monitoring, similar to Shazam's Auto mode.
 
-## Features
-
-* **Browser audio capture** using the Chrome `tabCapture` API.
-* **Audio processing** using the Web Audio API and AudioWorklet.
-* **Chunked audio capture** with five-second mono PCM audio chunks.
-* **WAV encoding** to convert audio chunks into 16-bit PCM WAV format for identification.
-* **Single identification** (`once`) to identify the music currently playing.
-* **Continuous identification** (`continuous`) to periodically identify music while capture remains active.
-* **Direct AudD integration** for music identification without an intermediary backend.
-* **Provider abstraction** through `MusicIdentificationService`, allowing additional identification providers to be integrated in the future.
-* **Chrome Manifest V3** architecture using a service worker and offscreen document.
-
 ## Development
 
 ### Prerequisites
@@ -23,6 +11,7 @@ The extension captures audio from the active browser tab, processes it into audi
 * Node.js
 * npm
 * Google Chrome or another compatible Chromium-based browser
+* An [AudD Music Recognition](https://docs.audd.io/) API key
 
 ### Install dependencies
 
@@ -31,16 +20,6 @@ From the `extension` directory:
 ```bash
 npm install
 ```
-
-### Available npm commands
-
-| Command             | Description                                    |
-| ------------------- | ---------------------------------------------- |
-| `npm install`       | Install project dependencies                   |
-| `npm run build`     | Type-check and create a production build       |
-| `npm run watch`     | Rebuild automatically when source files change |
-| `npm run typecheck` | Run TypeScript type checking                   |
-| `npm run clean`     | Remove the production build directory          |
 
 ### Build the extension
 
@@ -64,7 +43,14 @@ The extension will then be available in the Chrome toolbar.
 
 After making changes, rebuild the extension and select **Reload** on the extension's card in Chrome.
 
-For active development, `npm run watch` can be used to rebuild automatically. The extension must still be reloaded in Chrome to apply changes.
+### Set API key
+
+Before the extension can be used, an API key must be configured.
+
+1. Navigate to `chrome://extensions`.
+2. Under the extension click **Details**
+3. Within the details page click **Extension options**
+4. Set your API key and click save.
 
 ## Third-party Services and API Usage
 
